@@ -122,7 +122,7 @@
                 let sum = 0, weightSum = 0;
                 for (let j = 0; j < period; j++) {
                     let weight = j + 1;
-                    sum += data[i - period + 1 + j].close * weight;
+                    sum += data[i - period + j].close * weight;  // 修正索引
                     weightSum += weight;
                 }
                 wma.push(sum / weightSum);

@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>均線回測系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --success: #27ae60; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 2px solid #ddd; }
+        
+        .mode-selector { display: flex; gap: 10px; margin-bottom: 25px; }
+        .mode-btn { padding: 12px 24px; background: #e0e0e0; border: 2px solid #999; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        .mode-btn:hover { background: #d0d0d0; }
+        .mode-btn.active { background: var(--accent); color: white; border-color: #2980b9; }
+        
+        h1 { color: var(--primary); border-bottom: 3px solid #333; padding-bottom: 10px; }
+        .input-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .input-group { display: flex; flex-direction: column; }
+        label { font-weight: bold; margin-bottom: 8px; font-size: 14px; }
+        input, select { padding: 10px; border: 2px solid #bbb; border-radius: 6px; }
+        button { grid-column: span 2; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #2980b9; }
+        
+        .progress-wrapper { display: none; margin: 20px 0; }
+        .progress-bar { height: 12px; background: #eee; border-radius: 6px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.1s; }
+        
+        .results-grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; margin-top: 30px; }
+        .side-panel { display: flex; flex-direction: column; gap: 20px; }
+        .stats-card { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 5px solid var(--accent); }
+        
+        .rank-table-wrapper { max-height: 550px; overflow-y: auto; border: 2px solid #999; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; }
+        th, td { border: 2px solid #ccc; padding: 10px; text-align: center; }
+        th { background: #f8f9fa; position: sticky; top: 0; z-index: 1; }
+
+        #topTable tbody tr { cursor: pointer; transition: 0.2s; }
+        #topTable tbody tr:hover { background: #e3f2fd; }
+        #topTable tbody tr.selected { background: #bbdefb; font-weight: bold; }
+
+        .trade-table-wrapper { max-height: 400px; overflow-y: auto; border: 2px solid #999; margin-top: 10px; }
+        .buy-text { color: var(--success); font-weight: bold; }
+        .sell-text { color: var(--danger); font-weight: bold; }
+        .final-text { color: #e74c3c; font-weight: bold; font-style: italic; }
+        
+        #chartContainer { width: 100%; height: 450px; margin-top: 10px; }
+        
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; max-width: 100%; }
+        .chart-card { background: white; padding: 10px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 2px solid #ddd; overflow: hidden; }
+        .chart-title { font-size: 16px; font-weight: bold; color: var(--primary); margin-bottom: 5px; }
+        #scatter2dChart, #canvas3d { width: 100%; height: 500px; display: block; }
+        
+        .yearly-results { margin-top: 30px; display: none; }
+        .yearly-results.show { display: block; }
+        .yearly-header { color: var(--success); font-size: 18px; font-weight: bold; margin-bottom: 15px; border-bottom: 3px solid var(--success); padding-bottom: 10px; }
+        .yearly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .yearly-card { background: #f0f8f0; padding: 15px; border-radius: 8px; border-left: 5px solid var(--success); }
+        .yearly-card h4 { margin: 0 0 10px 0; color: var(--primary); }
+        .yearly-card p { margin: 5px 0; font-size: 13px; }
+        .intersection-table-wrapper { max-height: 600px; overflow-y: auto; border: 2px solid var(--success); border-radius: 6px; background: white; }
+        
+        .stability-section { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 2px solid var(--success); display: none; }
+        .stability-section.show { display: block; }
+        .stability-title { color: var(--success); font-size: 18px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .stability-title::before { content: ''; display: inline-block; width: 6px; height: 20px; background: var(--success); border-radius: 3px; }
+        #stabilityHeatmap { width: 100%; height: auto; min-height: 600px; }
+        .stable-params-info { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .stable-params-info h4 { margin-top: 0; color: var(--primary); font-size: 16px; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="mode-selector">
+        <button class="mode-btn active" onclick="switchMode('SMA')">SMA 簡單均線</button>
+        <button class="mode-btn" onclick="switchMode('WMA')">WMA 加權均線</button>
+        <button class="mode-btn" onclick="switchMode('EMA')">EMA 指數均線</button>
+    </div>
+    
+    <h1 id="pageTitle">SMA 均線回測系統</h1>
+
+    <div class="input-section">
+        <div class="input-group"><label>初始資金</label><input id="initialCash" type="number" value="10000"></div>
+        <div class="input-group"><label>選擇公司</label><select id="companySelect"><option>請先上傳 CSV</option></select></div>
+        <div class="input-group"><label>起始日期</label><input id="startDate" type="date" value="2024-01-01"></div>
+        <div class="input-group"><label>結束日期</label><input id="endDate" type="date" value="2024-12-31"></div>
+        <div class="input-group"><label>手續費 (%)</label><input id="commission" type="number" value="0.08" step="0.01"></div>
+        <div class="input-group"><label>分析起始年</label><select id="yearStart"><option value="">請先上傳 CSV</option></select></div>
+        <div class="input-group"><label>分析結束年</label><select id="yearEnd"><option value="">請先上傳 CSV</option></select></div>
+        <div class="input-group" style="grid-column: span 2;"><label>上傳 CSV 檔案</label><input id="csvFile" type="file" accept=".csv"></div>
+        <button id="runBtn" onclick="runOptimization()">開始全參數最佳化</button>
+        <button id="yearlyBtn" onclick="runYearlyIntersection()" style="background: var(--success);">參數穩定性分析</button>
+    </div>
+
+    <div class="progress-wrapper" id="progWrapper">
+        <label id="progLabel">計算進度...</label>
+        <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+    </div>
+
+    <div class="results-grid">
+        <div class="side-panel">
+            <div id="bestResult" class="stats-card">尚未執行</div>
+            <h3>🏆 排行榜 (Top 20)</h3>
+            <div class="rank-table-wrapper">
+                <table id="topTable">
+                    <thead><tr><th>排名</th><th>短/長</th><th>交易筆數</th><th>最終資產</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div>
+            <div id="chartContainer"><canvas id="mainChart"></canvas></div>
+            <h3 id="tableTitle">📑 交易明細</h3>
+            <div class="trade-table-wrapper">
+                <table id="tradeTable">
+                    <thead><tr><th>日期</th><th>動作</th><th>價格</th><th>股數</th><th>獲利</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chart-grid" id="chartGrid" style="display: none;">
+        <div class="chart-card">
+            <div class="chart-title">📊 2D 熱力圖 - 參數與獲利</div>
+            <div id="scatter2dChart"></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">🎮 3D 表面圖 - 參數優化空間</div>
+            <div id="canvas3d"></div>
+        </div>
+    </div>
+
+    <div class="yearly-results" id="yearlyResults">
+        <div class="yearly-header">📅 按年份分析結果</div>
+        <div class="yearly-grid" id="yearlyGrid"></div>
+        <h3 style="color: var(--success); margin-top: 20px;">✨ 每年都沒虧錢的參數組合</h3>
+        <div class="intersection-table-wrapper">
+            <table id="intersectionTable">
+                <thead><tr><th>排名</th><th>短/長</th><th>平均獲利</th><th>獲利年數</th><th>詳情</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="stability-section" id="stabilitySection">
+        <div class="stability-title">🔥 參數穩定性熱力圖 - 年份維度</div>
+        <p style="color: #666; margin-bottom: 15px;">顏色越紅表示該參數在該年獲利越高，只顯示所有年份都沒虧錢的參數組合</p>
+        <div id="stabilityHeatmap"></div>
+        <div class="stable-params-info">
+            <h4>✨ 跨年份最穩定參數 TOP 10</h4>
+            <p style="font-size: 12px; color: #999; margin-bottom: 10px;">點擊任何參數可查看詳細回測結果</p>
+            <div id="stableParamsList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let g_backtestData = [], g_allMA = {}, g_startIdx = 0, g_initialCash = 0, g_commission = 0, chartInstance = null;
+    let g_currentMode = 'SMA';
+    let g_allResults = [];
+    const MAX_PERIOD = 256;
+
+    function switchMode(mode) {
+        g_currentMode = mode;
+        const title = mode === 'SMA' ? 'SMA 均線回測系統' : (mode === 'WMA' ? 'WMA 均線回測系統' : 'EMA 均線回測系統');
+        document.getElementById('pageTitle').innerText = title;
+        
+        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        document.getElementById('bestResult').innerHTML = '尚未執行';
+        document.querySelector("#topTable tbody").innerHTML = '';
+        document.querySelector("#tradeTable tbody").innerHTML = '';
+        if (chartInstance) chartInstance.destroy();
+        document.getElementById('chartGrid').style.display = 'none';
+        g_allMA = {};
+    }
+
+    function formatCurrency(num) {
+        return num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function dateToInt(dStr) {
+        if (!dStr) return 0;
+        const parts = dStr.includes('-') ? dStr.split('-') : dStr.split('/');
+        if (parts.length !== 3) return 0;
+        const [y, m, d] = dStr.includes('-') ? parts : [parts[2], parts[0], parts[1]];
+        return parseInt(y + m.padStart(2, '0') + d.padStart(2, '0'));
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const lines = event.target.result.trim().split("\n");
+            window.csvHeaders = lines[0].split(",").map(h => h.trim());
+            window.csvRaw = lines.slice(1).map(line => line.split(","));
+            document.getElementById("companySelect").innerHTML = window.csvHeaders.slice(1).map(h => `<option value="${h}">${h}</option>`).join('');
+            
+            // 自動填充年份選擇器
+            const years = new Set();
+            window.csvRaw.forEach(r => {
+                const dateStr = r[0];
+                const year = dateStr.includes('-') ? dateStr.split('-')[0] : dateStr.split('/')[2];
+                if (year && year.length === 4) years.add(year);
+            });
+            const sortedYears = [...years].sort();
+            document.getElementById('yearStart').innerHTML = sortedYears.map(y => `<option value="${y}">${y}</option>`).join('');
+            document.getElementById('yearEnd').innerHTML = sortedYears.map(y => `<option value="${y}">${y}</option>`).join('');
+            // 預設選擇最後一年作為結束年
+            if (sortedYears.length > 0) {
+                document.getElementById('yearEnd').value = sortedYears[sortedYears.length - 1];
+                // 預設選擇10年前或最早年份作為起始年
+                const startIdx = Math.max(0, sortedYears.length - 10);
+                document.getElementById('yearStart').value = sortedYears[startIdx];
+            }
+        };
+        reader.readAsText(e.target.files[0]);
+    });
+
+    function precomputeSMA(data, period) {
+        let sma = [], sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            sum += data[i].close;
+            if (i >= period) sum -= data[i - period].close;
+            sma.push(i >= period - 1 ? sum / period : null);
+        }
+        return sma;
+    }
+
+    function precomputeWMA(data, period) {
+        let wma = [];
+        for (let i = 0; i < data.length; i++) {
+            if (i < period - 1) {
+                wma.push(null);
+            } else {
+                let sum = 0, weightSum = 0;
+                for (let j = 0; j < period; j++) {
+                    let weight = j + 1;  // 權重: 1, 2, 3, ..., period
+                    sum += data[i - period + j].close * weight;  // 正確索引
+                    weightSum += weight;
+                }
+                wma.push(sum / weightSum);
+            }
+        }
+        return wma;
+    }
+
+    function precomputeEMA(data, period) {
+        let ema = [];
+        const multiplier = 2 / (period + 1);
+        let smaSum = 0;
+        
+        for (let i = 0; i < period; i++) {
+            smaSum += data[i].close;
+        }
+        let currentEMA = smaSum / period;
+        ema[period - 1] = currentEMA;
+        
+        for (let i = 0; i < period - 1; i++) {
+            ema[i] = null;
+        }
+        
+        for (let i = period; i < data.length; i++) {
+            currentEMA = (data[i].close - currentEMA) * multiplier + currentEMA;
+            ema[i] = currentEMA;
+        }
+        
+        return ema;
+    }
+
+    function backtest(data, maS, maL, initialCash, startIdx, commission, recordTrades = false) {
+        const COMMISSION = commission / 100;
+        let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
+        let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
+
+        for (let i = startIdx; i < data.length; i++) {
+            const price = data[i].close;
+            const isLastDay = (i === data.length - 1);
+            
+            if (i > 0 && maS[i-1] !== null && maL[i-1] !== null) {
+                if (maS[i-1] < maL[i-1] && maS[i] >= maL[i]) {
+                    allCrosses.push({ date: data[i].date, type: 'gold', val: maS[i] });
+                    if (!hasPos && !isLastDay) {
+                        shares = Math.floor(cash / (price * (1 + COMMISSION)));
+                        if (shares > 0) {
+                            let cost = shares * price * (1 + COMMISSION);
+                            distCap = cash; cash -= cost; hasPos = true;
+                            tradeCount++;
+                            if (recordTrades) trades.push({ date: data[i].date, action: '買入', price, shares });
+                        }
+                    }
+                } 
+                else if (maS[i-1] > maL[i-1] && maS[i] <= maL[i]) {
+                    allCrosses.push({ date: data[i].date, type: 'death', val: maS[i] });
+                    if (hasPos) {
+                        let sellVal = shares * price * (1 - COMMISSION);
+                        let profit = (cash + sellVal) - distCap;
+                        tradeCount++;
+                        if (recordTrades) trades.push({ date: data[i].date, action: '賣出', price, shares, profit: profit });
+                        cash += sellVal; shares = 0; hasPos = false;
+                    }
+                }
+            }
+            
+            if (hasPos && isLastDay) {
+                let sellVal = shares * price * (1 - COMMISSION);
+                tradeCount++;
+                if (recordTrades) trades.push({ date: data[i].date, action: '賣出(平倉)', price, shares, profit: (cash + sellVal) - distCap });
+                cash += sellVal; shares = 0; hasPos = false;
+            }
+            let currentVal = cash + (shares * price);
+            maxValue = Math.max(maxValue, currentVal);
+            maxDD = Math.max(maxDD, (maxValue - currentVal) / maxValue);
+        }
+        return { finalAsset: cash, maxDD: maxDD * 100, trades, allCrosses, tradeCount };
+    }
+
+    // 年份回測：使用完整數據的MA，但只在指定年份範圍內進行交易
+    function backtestYearly(data, maS, maL, initialCash, yearStartIdx, yearEndIdx, commission) {
+        const COMMISSION = commission / 100;
+        let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
+        let maxValue = initialCash, maxDD = 0, tradeCount = 0;
+
+        for (let i = yearStartIdx; i <= yearEndIdx; i++) {
+            const price = data[i].close;
+            const isLastDay = (i === yearEndIdx);
+            
+            if (i > 0 && maS[i-1] !== null && maL[i-1] !== null && maS[i] !== null && maL[i] !== null) {
+                // 黃金交叉：買入
+                if (maS[i-1] < maL[i-1] && maS[i] >= maL[i]) {
+                    if (!hasPos && !isLastDay) {
+                        shares = Math.floor(cash / (price * (1 + COMMISSION)));
+                        if (shares > 0) {
+                            let cost = shares * price * (1 + COMMISSION);
+                            distCap = cash; cash -= cost; hasPos = true;
+                            tradeCount++;
+                        }
+                    }
+                } 
+                // 死亡交叉：賣出
+                else if (maS[i-1] > maL[i-1] && maS[i] <= maL[i]) {
+                    if (hasPos) {
+                        let sellVal = shares * price * (1 - COMMISSION);
+                        tradeCount++;
+                        cash += sellVal; shares = 0; hasPos = false;
+                    }
+                }
+            }
+            
+            // 年末平倉
+            if (hasPos && isLastDay) {
+                let sellVal = shares * price * (1 - COMMISSION);
+                tradeCount++;
+                cash += sellVal; shares = 0; hasPos = false;
+            }
+            
+            let currentVal = cash + (shares * price);
+            maxValue = Math.max(maxValue, currentVal);
+            maxDD = Math.max(maxDD, (maxValue - currentVal) / maxValue);
+        }
+        return { finalAsset: cash, maxDD: maxDD * 100, tradeCount };
+    }
+
+    async function runOptimization() {
+        const btn = document.getElementById('runBtn');
+        g_initialCash = parseFloat(document.getElementById('initialCash').value);
+        g_commission = parseFloat(document.getElementById('commission').value);
+        const company = document.getElementById('companySelect').value;
+        const sInt = dateToInt(document.getElementById('startDate').value);
+        const eInt = dateToInt(document.getElementById('endDate').value);
+        
+        if (!window.csvRaw) return alert("請先上傳 CSV");
+
+        let data = window.csvRaw.map(r => ({ date: r[0], close: parseFloat(r[window.csvHeaders.indexOf(company)]) }))
+                             .filter(d => !isNaN(d.close)).sort((a, b) => dateToInt(a.date) - dateToInt(b.date));
+        const startIdxFull = data.findIndex(d => dateToInt(d.date) >= sInt);
+        const endIdx = data.findLastIndex(d => dateToInt(d.date) <= eInt);
+        if (startIdxFull === -1 || endIdx === -1 || startIdxFull > endIdx) {
+            alert('所選日期範圍沒有資料，請檢查 CSV 或日期設定');
+            btn.disabled = false;
+            document.getElementById('progWrapper').style.display = 'none';
+            return;
+        }
+        const sliceStartForCompute = Math.max(0, startIdxFull - MAX_PERIOD);
+        g_backtestData = data.slice(sliceStartForCompute, endIdx + 1);
+        g_startIdx = startIdxFull - sliceStartForCompute;
+
+        btn.disabled = true; 
+        document.getElementById('progWrapper').style.display = 'block';
+        g_allMA = {};
+        
+        const computeFunc = g_currentMode === 'SMA' ? precomputeSMA : (g_currentMode === 'WMA' ? precomputeWMA : precomputeEMA);
+        for (let p = 1; p <= MAX_PERIOD; p++) g_allMA[p] = computeFunc(g_backtestData, p);
+
+        let results = [];
+        g_allResults = [];
+        for (let s = 1; s <= MAX_PERIOD; s++) {
+            if (s % 16 === 0) {
+                document.getElementById('progFill').style.width = (s/MAX_PERIOD*100) + "%";
+                await new Promise(r => setTimeout(r, 0));
+            }
+            for (let l = 1; l <= MAX_PERIOD; l++) {
+                let res = backtest(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission);
+                let profit = res.finalAsset - g_initialCash;
+                results.push({ s, l, ...res, profit });
+                g_allResults.push({ s, l, finalAsset: res.finalAsset, profit });
+            }
+        }
+
+        results.sort((a, b) => {
+            if (Math.abs(a.finalAsset - b.finalAsset) > 0.01) return b.finalAsset - a.finalAsset;
+            let diffA = Math.abs(a.s - a.l), diffB = Math.abs(b.s - b.l);
+            if (diffA !== diffB) return diffB - diffA; 
+            if (a.s !== b.s) return a.s - b.s;
+            return a.l - b.l;
+        });
+
+        updateRankTable(results.slice(0, 20)); 
+        showSpecificResult(results[0].s, results[0].l, 1, null, g_commission);
+        render2DChart();
+        render3DChart();
+        document.getElementById('chartGrid').style.display = 'grid';
+        btn.disabled = false; 
+        document.getElementById('progWrapper').style.display = 'none';
+    }
+
+    function updateRankTable(top) {
+        document.querySelector("#topTable tbody").innerHTML = top.map((r, i) => 
+            `<tr onclick="showSpecificResult(${r.s}, ${r.l}, ${i+1}, this)">
+                <td>${i+1}</td><td>${r.s}/${r.l}</td><td>${r.tradeCount}</td><td>$${formatCurrency(r.finalAsset)}</td>
+            </tr>`).join('');
+    }
+
+    function showSpecificResult(s, l, rank, element = null, commission = g_commission) {
+        if (element) {
+            document.querySelectorAll('#topTable tbody tr').forEach(tr => tr.classList.remove('selected'));
+            element.classList.add('selected');
+        }
+
+        const sVal = s, lVal = l;
+        const data = g_backtestData;
+        const mS = g_allMA[sVal], mL = g_allMA[lVal];
+        let result = backtest(data, mS, mL, g_initialCash, g_startIdx, commission, true);
+        const trades = result.trades, allCrosses = result.allCrosses;
+
+        const displayData = data.slice(g_startIdx);
+        const displayMS = mS ? mS.slice(g_startIdx) : [];
+        const displayML = mL ? mL.slice(g_startIdx) : [];
+
+        document.getElementById('bestResult').innerHTML = `
+            <h3>排名 #${rank} - 最優參數: <span style="color: #e74c3c;">${sVal}/${lVal}</span></h3>
+            <p>最終資產: <strong style="color: #27ae60;">$${formatCurrency(result.finalAsset)}</strong></p>
+            <p>獲利: <span style="color: #3498db;">$${formatCurrency(result.finalAsset - g_initialCash)}</span></p>
+            <p>收益率: <span>${((result.finalAsset / g_initialCash - 1) * 100).toFixed(2)}%</span></p>
+            <p>最大回撤: <span>${result.maxDD.toFixed(2)}%</span></p>
+            <p>交易筆數: <strong>${trades.length}</strong></p>
+        `;
+
+        document.querySelector("#tradeTable tbody").innerHTML = trades.map((t, i) => 
+            `<tr>
+                <td>${t.date}</td>
+                <td class="${t.action.includes('買') ? 'buy-text' : 'sell-text'}">${t.action}</td>
+                <td>$${t.price.toFixed(2)}</td>
+                <td>${t.shares}</td>
+                <td class="${t.profit > 0 ? 'buy-text' : t.profit === 0 ? '' : 'sell-text'}">${t.profit ? `$${formatCurrency(t.profit)}` : '-'}</td>
+            </tr>`).join('');
+
+        if (chartInstance) chartInstance.destroy();
+        const ctx = document.getElementById("mainChart").getContext("2d");
+        const modeLabel = g_currentMode;
+        chartInstance = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: displayData.map(d => d.date),
+                datasets: [
+                    { label: '實際買入', data: displayData.map(d => trades.find(t => t.date === d.date && t.action === '買入') ? d.close : null), borderColor: '#27ae60', backgroundColor: '#27ae60', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10 },
+                    { label: '實際賣出/平倉', data: displayData.map(d => trades.find(t => t.date === d.date && (t.action === '賣出' || t.action === '賣出(平倉)')) ? d.close : null), borderColor: '#e74c3c', backgroundColor: '#e74c3c', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10 },
+                    { label: '黃金交叉', data: displayData.map(d => {
+                        const cross = allCrosses.find(c => c.date === d.date && c.type === 'gold');
+                        return cross ? cross.val : null;
+                    }), borderColor: '#f1c40f', pointStyle: 'circle', pointRadius: 5, showLine: false, z: 5 },
+                    { label: '死亡交叉', data: displayData.map(d => {
+                        const cross = allCrosses.find(c => c.date === d.date && c.type === 'death');
+                        return cross ? cross.val : null;
+                    }), borderColor: '#95a5a6', pointStyle: 'circle', pointRadius: 5, showLine: false, z: 5 },
+                    { label: '收盤價', data: displayData.map(d => d.close), borderColor: '#ddd', borderWidth: 1, pointRadius: 0, z: 1 },
+                    { label: `${modeLabel} ${sVal}`, data: displayMS, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 0, z: 2 },
+                    { label: `${modeLabel} ${lVal}`, data: displayML, borderColor: '#3498db', borderWidth: 2, pointRadius: 0, z: 2 }
+                ]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { usePointStyle: true } }
+                }
+            }
+        });
+    }
+
+    function render2DChart() {
+        const container = document.getElementById('scatter2dChart');
+        
+        const maxPeriod = Math.max(...g_allResults.map(r => Math.max(r.s, r.l)));
+        const heatmapData = Array(maxPeriod).fill(0).map(() => Array(maxPeriod).fill(null));
+        
+        for (let r of g_allResults) {
+            if (r.s <= maxPeriod && r.l <= maxPeriod) {
+                heatmapData[r.l - 1][r.s - 1] = r.profit;
+            }
+        }
+
+        const trace = {
+            z: heatmapData,
+            x: Array.from({length: maxPeriod}, (_, i) => i + 1),
+            y: Array.from({length: maxPeriod}, (_, i) => i + 1),
+            type: 'heatmap',
+            colorscale: [
+                [0, '#0000ff'],
+                [0.167, '#0080ff'],
+                [0.333, '#00ffff'],
+                [0.5, '#00ff00'],
+                [0.667, '#ffff00'],
+                [0.833, '#ff8000'],
+                [1, '#ff0000']
+            ],
+            hovertemplate: '短期: %{x}<br>長期: %{y}<br>獲利: $%{z:,.0f}<extra></extra>',
+            showscale: true
+        };
+
+        const layout = {
+            title: '參數組合獲利熱力圖',
+            xaxis: { title: '短期均線週期', showgrid: false },
+            yaxis: { title: '長期均線週期', showgrid: false },
+            margin: { l: 80, r: 80, t: 60, b: 80 },
+            font: { family: 'Segoe UI', size: 12 },
+            hovermode: 'closest'
+        };
+
+        Plotly.newPlot(container, [trace], layout, { responsive: true, displayModeBar: true });
+    }
+
+    function render3DChart() {
+        const container = document.getElementById('canvas3d');
+        
+        const maxPeriod = Math.max(...g_allResults.map(r => Math.max(r.s, r.l)));
+        const surfaceData = Array(maxPeriod).fill(0).map(() => Array(maxPeriod).fill(null));
+        
+        for (let r of g_allResults) {
+            if (r.s <= maxPeriod && r.l <= maxPeriod) {
+                surfaceData[r.l - 1][r.s - 1] = r.profit;
+            }
+        }
+
+        const trace = {
+            z: surfaceData,
+            x: Array.from({length: maxPeriod}, (_, i) => i + 1),
+            y: Array.from({length: maxPeriod}, (_, i) => i + 1),
+            type: 'surface',
+            colorscale: [
+                [0, '#0000ff'],
+                [0.167, '#0080ff'],
+                [0.333, '#00ffff'],
+                [0.5, '#00ff00'],
+                [0.667, '#ffff00'],
+                [0.833, '#ff8000'],
+                [1, '#ff0000']
+            ],
+            hovertemplate: '短期: %{x}<br>長期: %{y}<br>獲利: $%{z:,.0f}<extra></extra>',
+            showscale: true,
+            opacity: 0.9
+        };
+
+        const layout = {
+            title: '3D 參數優化空間',
+            scene: {
+                xaxis: { title: '短期週期' },
+                yaxis: { title: '長期週期' },
+                zaxis: { title: '獲利 ($)' },
+                aspectmode: 'auto',
+                camera: {
+                    eye: { x: 1.8, y: 1.8, z: 1.4 }
+                }
+            },
+            margin: { l: 0, r: 0, t: 60, b: 0 },
+            font: { family: 'Segoe UI', size: 12 },
+            hovermode: 'closest'
+        };
+
+        Plotly.newPlot(container, [trace], layout, { responsive: true, displayModeBar: true });
+    }
+
+    async function runYearlyIntersection() {
+        const btn = document.getElementById('yearlyBtn');
+        g_initialCash = parseFloat(document.getElementById('initialCash').value);
+        g_commission = parseFloat(document.getElementById('commission').value);
+        const company = document.getElementById('companySelect').value;
+        const yearStart = document.getElementById('yearStart').value;
+        const yearEnd = document.getElementById('yearEnd').value;
+        
+        if (!window.csvRaw) return alert("請先上傳 CSV");
+        if (!yearStart || !yearEnd) return alert("請選擇分析的年份範圍");
+        if (yearStart > yearEnd) return alert("起始年不能大於結束年");
+
+        let data = window.csvRaw.map(r => ({ date: r[0], close: parseFloat(r[window.csvHeaders.indexOf(company)]) }))
+                             .filter(d => !isNaN(d.close)).sort((a, b) => dateToInt(a.date) - dateToInt(b.date));
+
+        // 按年份分組數據，但保留索引信息
+        const yearlyData = {};
+        const yearlyIndices = {};  // 記錄每年數據的起止索引
+        data.forEach((d, idx) => {
+            const year = d.date.includes('-') ? d.date.split('-')[0] : d.date.split('/')[2];
+            if (!yearlyData[year]) {
+                yearlyData[year] = [];
+                yearlyIndices[year] = { start: idx, end: idx };
+            }
+            yearlyData[year].push(d);
+            yearlyIndices[year].end = idx;
+        });
+
+        // 根據選擇的年份範圍過濾
+        let years = Object.keys(yearlyData).sort().filter(y => y >= yearStart && y <= yearEnd);
+        
+        if (years.length < 2) return alert("選擇的年份範圍內至少需要 2 年以上的數據");
+
+        btn.disabled = true;
+        document.getElementById('progWrapper').style.display = 'block';
+        
+        // 先計算整個數據集的MA（與交易明細一致）
+        const computeFunc = g_currentMode === 'SMA' ? precomputeSMA : (g_currentMode === 'WMA' ? precomputeWMA : precomputeEMA);
+        const allMA = {};
+        for (let p = 1; p <= MAX_PERIOD; p++) allMA[p] = computeFunc(data, p);
+        
+        // 記錄每個參數在每一年的獲利
+        const paramProfits = {};  // {s_l: {year: profit, ...}, ...}
+        const yearlyBestParams = {};
+        
+        for (let i = 0; i < years.length; i++) {
+            const year = years[i];
+            const { start: yearStartIdx, end: yearEndIdx } = yearlyIndices[year];
+            document.getElementById('progLabel').innerText = `分析 ${year} 年 (${i+1}/${years.length})`;
+            document.getElementById('progFill').style.width = ((i+1)/years.length*100) + "%";
+            await new Promise(r => setTimeout(r, 10));
+
+            // 測試所有參數組合（使用完整數據的MA，只在該年份範圍內回測）
+            const yearResults = [];
+            for (let s = 1; s <= MAX_PERIOD; s++) {
+                for (let l = 1; l <= MAX_PERIOD; l++) {
+                    // 使用交易明細相同的算法：連續回測，但限制在該年份範圍
+                    const yearData = data.slice(yearStartIdx, yearEndIdx + 1);
+                    const yearMaS = allMA[s].slice(yearStartIdx, yearEndIdx + 1);
+                    const yearMaL = allMA[l].slice(yearStartIdx, yearEndIdx + 1);
+                    const res = backtest(yearData, yearMaS, yearMaL, g_initialCash, 0, g_commission, false);
+                    const profit = res.finalAsset - g_initialCash;
+                    
+                    const key = `${s}_${l}`;
+                    if (!paramProfits[key]) paramProfits[key] = {};
+                    paramProfits[key][year] = profit;
+                    
+                    yearResults.push({ s, l, profit, finalAsset: res.finalAsset });
+                }
+            }
+            
+            // 找該年最佳參數
+            yearResults.sort((a, b) => b.finalAsset - a.finalAsset);
+            yearlyBestParams[year] = yearResults[0];
+        }
+
+        // 找出在所有年份都沒虧錢的參數組合
+        const stableParams = [];
+        for (const [key, profits] of Object.entries(paramProfits)) {
+            const [s, l] = key.split('_').map(Number);
+            const profitsArray = Object.values(profits);
+            
+            // 檢查所有年份都有數據且都沒虧錢
+            if (Object.keys(profits).length === years.length && profitsArray.every(p => p >= 0)) {
+                const avgProfit = profitsArray.reduce((a, b) => a + b, 0) / profitsArray.length;
+                const totalProfit = profitsArray.reduce((a, b) => a + b, 0);
+                stableParams.push({
+                    s, l, key,
+                    avgProfit,
+                    totalProfit,
+                    profits: Object.fromEntries(Object.entries(profits).map(([yr, pft]) => [yr, pft]))
+                });
+            }
+        }
+
+        stableParams.sort((a, b) => b.avgProfit - a.avgProfit);
+
+        // 顯示年份統計卡片
+        const yearlyGrid = document.getElementById('yearlyGrid');
+        yearlyGrid.innerHTML = '';
+        for (const year of years) {
+            const best = yearlyBestParams[year];
+            
+            const card = document.createElement('div');
+            card.className = 'yearly-card';
+            card.innerHTML = `
+                <h4>${year} 年</h4>
+                <p>穩定參數數量: <strong>${Object.values(paramProfits).filter(p => p[year] >= 0).length}</strong></p>
+                <p>最佳獲利: <strong style="color: var(--success);">$${formatCurrency(best.finalAsset - g_initialCash)}</strong></p>
+                <p>最佳參數: <span style="color: var(--accent); font-weight: bold;">${best.s}/${best.l}</span></p>
+            `;
+            yearlyGrid.appendChild(card);
+        }
+
+        // 生成參數穩定性熱力圖 (Plotly)
+        const topStableParams = stableParams.slice(0, 100);  // 顯示 top 100 穩定參數
+        
+        // 檢查是否有穩定參數
+        if (topStableParams.length === 0) {
+            alert('❌ 未找到在所有年份都沒虧錢的參數組合\n\n可能原因：\n1. 數據跨度不足\n2. 手續費設置過高\n3. 初始資金不足\n\n請嘗試：\n- 調整手續費\n- 檢查數據完整性');
+            btn.disabled = false;
+            document.getElementById('progWrapper').style.display = 'none';
+            return;
+        }
+        
+        const heatmapData = topStableParams.map(p => years.map(yr => p.profits[yr]));
+        const paramLabels = topStableParams.map(p => `${p.s}/${p.l}`);
+
+        const trace = {
+            z: heatmapData,
+            x: years,
+            y: paramLabels,
+            type: 'heatmap',
+            colorscale: [
+                [0, '#0000ff'],
+                [0.167, '#0080ff'],
+                [0.333, '#00ffff'],
+                [0.5, '#00ff00'],
+                [0.667, '#ffff00'],
+                [0.833, '#ff8800'],
+                [1, '#ff0000']
+            ],
+            hovertemplate: '參數: %{y}<br>年份: %{x}<br>獲利: $%{z:,.0f}<extra></extra>',
+            showscale: true,
+            colorbar: {
+                title: '獲利 ($)',
+                thickness: 20,
+                len: 0.7
+            }
+        };
+
+        const layout = {
+            title: `所有年份都沒虧錢的參數穩定性熱力圖 (共 ${stableParams.length} 個)`,
+            xaxis: { title: '年份', side: 'bottom' },
+            yaxis: { title: '參數組合 (短期/長期)', automargin: true },
+            height: Math.max(500, 25 * Math.min(topStableParams.length, 100)),
+            width: Math.max(800, 100 + 80 * years.length),
+            margin: { l: 120, r: 100, t: 80, b: 100 },
+            font: { family: 'Segoe UI', size: 11 },
+            hovermode: 'closest',
+            paper_bgcolor: '#f8f9fa',
+            plot_bgcolor: 'white'
+        };
+
+        Plotly.newPlot(document.getElementById('stabilityHeatmap'), [trace], layout, { responsive: true, displayModeBar: true });
+
+        // 為熱力圖添加點擊事件 - 點擊參數可查看詳情
+        document.getElementById('stabilityHeatmap').on('plotly_click', function(data) {
+            if (data.points.length > 0) {
+                const point = data.points[0];
+                const paramIdx = point.pointNumber[0];
+                const param = topStableParams[paramIdx];
+                if (param) {
+                    showSpecificResult(param.s, param.l, 1);
+                }
+            }
+        });
+
+        // 顯示 Top 10 最穩定參數
+        const stableParamsList = document.getElementById('stableParamsList');
+        stableParamsList.innerHTML = stableParams.slice(0, 10).map((p, i) => {
+            const minProfit = Math.min(...Object.values(p.profits));
+            const maxProfit = Math.max(...Object.values(p.profits));
+            const profitVariance = ((maxProfit - minProfit) / p.avgProfit * 100).toFixed(1);
+            
+            return `
+            <div style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); padding: 15px; margin-bottom: 12px; border-left: 5px solid var(--accent); border-radius: 6px; cursor: pointer; transition: 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" 
+                 onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" 
+                 onmouseout="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'"
+                 onclick="showSpecificResult(${p.s}, ${p.l}, 1)">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <strong style="font-size: 15px; color: var(--primary);">🏆 排名 #${i+1}: 參數 <span style="color: var(--accent); font-size: 16px;">${p.s}/${p.l}</span></strong>
+                    <span style="background: var(--success); color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;">最穩定</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+                    <div>
+                        <p style="margin: 4px 0; color: #666;">📊 平均年獲利</p>
+                        <p style="margin: 4px 0; color: var(--success); font-weight: bold; font-size: 14px;">$${formatCurrency(p.avgProfit)}</p>
+                    </div>
+                    <div>
+                        <p style="margin: 4px 0; color: #666;">💰 總獲利 (${years.length}年)</p>
+                        <p style="margin: 4px 0; color: var(--accent); font-weight: bold; font-size: 14px;">$${formatCurrency(p.totalProfit)}</p>
+                    </div>
+                    <div>
+                        <p style="margin: 4px 0; color: #666;">📈 獲利波動度</p>
+                        <p style="margin: 4px 0; color: #e67e22; font-weight: bold;">±${profitVariance}%</p>
+                    </div>
+                    <div>
+                        <p style="margin: 4px 0; color: #666;">✅ 穩定性</p>
+                        <p style="margin: 4px 0; color: var(--success); font-weight: bold;">${years.length}/${years.length} 年</p>
+                    </div>
+                </div>
+                <p style="margin: 8px 0 0 0; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 8px;">
+                    各年獲利: ${years.map(yr => `<span style="display: inline-block; margin-right: 15px; width: 130px;"><strong>${yr}:</strong> <span style="font-family: 'Courier New', monospace; color: ${p.profits[yr] >= 0 ? '#27ae60' : '#e74c3c'}; text-align: right; display: inline-block; width: 85px;">$${formatCurrency(p.profits[yr])}</span></span>`).join('')}
+                </p>
+            </div>
+        `}).join('');
+
+        document.getElementById('stabilitySection').classList.add('show');
+        document.getElementById('yearlyResults').classList.remove('show');
+        
+        btn.disabled = false;
+        document.getElementById('progWrapper').style.display = 'none';
+        
+        // 詳細的完成提示
+        const bestParam = stableParams[0];
+        const minProfit = Math.min(...Object.values(bestParam.profits));
+        const maxProfit = Math.max(...Object.values(bestParam.profits));
+        alert(`✨ 分析完成！
+
+📊 統計結果：
+• 找到 ${stableParams.length} 個在所有年份都沒虧錢的參數組合
+• 跨越年份：${years.length} 年 (${years[0]} ~ ${years[years.length-1]})
+
+🏆 最佳參數：${bestParam.s}/${bestParam.l}
+• 平均年獲利：$${formatCurrency(bestParam.avgProfit)}
+• 總獲利：$${formatCurrency(bestParam.totalProfit)}
+• 最高年獲利：$${formatCurrency(maxProfit)} (${Object.entries(bestParam.profits).find(([_, p]) => p === maxProfit)[0]} 年)
+• 最低年獲利：$${formatCurrency(minProfit)} (${Object.entries(bestParam.profits).find(([_, p]) => p === minProfit)[0]} 年)
+
+💡 提示：點擊任何參數可查看該組合的詳細回測結果和走勢圖`);
+    }
+</script>
+
+</body>
+</html>
