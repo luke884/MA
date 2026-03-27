@@ -1,10 +1,12 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <title>均線回測系統</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <script src="https://unpkg.com/xlsx@latest/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -28,9 +30,214 @@
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             min-height: 100vh;
             color: var(--primary);
-            padding: 20px;
+            padding: 0;
+            margin: 0;
         }
-        
+
+        /* 頂部導航欄 */
+        .navbar {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-title {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .navbar-menu {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .navbar-btn {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .navbar-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .navbar-btn.active {
+            background: #0ea5e9;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+        }
+
+        /* 主容器 */
+        .main-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: relative !important;
+            width: 100% !important;
+            background: transparent;
+        }
+
+        /* 視圖容器 */
+        .view {
+            display: none !important;
+        }
+
+        .view.active {
+            display: block !important;
+        }
+
+        #homeView.active {
+            display: block !important;
+        }
+
+        /* 首頁樣式 */
+        .home-view {
+            text-align: center;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .home-header {
+            margin-bottom: 60px;
+        }
+
+        .home-header h1 {
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .home-header p {
+            font-size: 18px;
+            color: var(--secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .mode-grid {
+            display: flex !important;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 24px !important;
+            margin: 0 auto 60px !important;
+            width: 100% !important;
+            padding: 0 20px !important;
+            box-sizing: border-box !important;
+        }
+
+        .mode-card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            flex: 0 1 300px;
+        }
+
+        .mode-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-8px);
+            box-shadow: 0 12px 24px rgba(14, 165, 233, 0.15);
+        }
+
+        .mode-card-icon {
+            font-size: 48px;
+        }
+
+        .mode-card h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .mode-card p {
+            font-size: 14px;
+            color: var(--secondary);
+            text-align: center;
+        }
+
+        .feature-comparison {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 2px solid #8b5cf6;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .feature-comparison:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(139, 92, 246, 0.15);
+        }
+
+        .feature-comparison h3 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #7c3aed;
+            margin-bottom: 12px;
+        }
+
+        .feature-comparison p {
+            font-size: 16px;
+            color: var(--secondary);
+            margin-bottom: 24px;
+        }
+
+        .feature-btn {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 12px 32px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        .feature-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
+        }
+
         .container {
             max-width: 1600px;
             margin: 0 auto;
@@ -88,6 +295,7 @@
             font-weight: 600;
             color: var(--primary);
             margin-bottom: 16px;
+            margin-top: 20px;
         }
         
         /* 輸入區域 */
@@ -422,7 +630,7 @@
         /* 結果網格 */
         .results-grid {
             display: grid;
-            grid-template-columns: 420px 1fr;
+            grid-template-columns: 550px 1fr;
             gap: 24px;
             margin-top: 30px;
         }
@@ -431,6 +639,22 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+            align-self: start;
+        }
+        
+        .side-panel > :first-child {
+            margin-top: 0;
+        }
+        
+        .side-panel h3 {
+            margin-top: 0;
+        }
+        
+        /* 右側內容容器 - 統一padding */
+        .results-grid > div:last-child {
+            display: flex;
+            flex-direction: column;
+            align-self: start;
         }
         
         .stats-card {
@@ -439,10 +663,12 @@
             border-radius: 12px;
             border-left: 4px solid var(--accent);
             box-shadow: var(--shadow);
+            margin: 0;
         }
         
         .stats-card h3 {
             margin-bottom: 16px;
+            margin-top: 0;
             color: var(--primary);
         }
         
@@ -462,11 +688,12 @@
         
         /* 排名表 */
         .rank-table-wrapper {
-            max-height: 600px;
+            max-height: 900px;
             overflow-y: auto;
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 12px;
             box-shadow: var(--shadow);
+            flex-grow: 1;
         }
         
         .rank-table-wrapper::-webkit-scrollbar {
@@ -536,7 +763,7 @@
             max-height: 450px;
             overflow-y: auto;
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 12px;
             margin-top: 12px;
             box-shadow: var(--shadow);
         }
@@ -562,9 +789,22 @@
             width: 100%;
             height: 500px;
             margin-top: 20px;
-            padding: 20px;
+            padding: 0;
             background: var(--bg-light);
             border-radius: 12px;
+            border: 1px solid var(--border);
+            box-sizing: border-box;
+        }
+        
+        #volumeChartContainer {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            padding: 0;
+            background: var(--bg-light);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-sizing: border-box;
         }
         
         /* 2D/3D 圖表 */
@@ -599,6 +839,207 @@
             display: block;
         }
         
+        /* 支配關係比較區域 */
+        #dominanceSection {
+            background: white;
+            padding: 32px 40px !important;
+            border-radius: 16px !important;
+            border: 2px solid #8b5cf6 !important;
+            margin: 32px 0 !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            display: none !important;
+        }
+
+        #dominanceSection.visible {
+            display: block !important;
+        }
+
+        #dominanceSection h3 {
+            color: #1e293b;
+            margin-bottom: 24px;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dominance-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 16px;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+
+        .dominance-container .input-group {
+            margin-bottom: 0;
+        }
+
+        .dominance-container select {
+            border: 1px solid #cbd5e1;
+            background: white;
+            color: #1e293b;
+            padding: 12px 16px;
+            font-size: 15px;
+            border-radius: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dominance-container select:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+        }
+
+        .dominance-container select:hover {
+            border-color: #8b5cf6;
+        }
+
+        .dominance-container button {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+            color: white !important;
+            padding: 12px 32px !important;
+            font-weight: 700 !important;
+            border: none !important;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3) !important;
+            border-radius: 8px !important;
+            font-size: 15px !important;
+        }
+
+        .dominance-container button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4) !important;
+        }
+
+        .dominance-result-container {
+            margin-top: 24px;
+        }
+
+        .dominance-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #8b5cf6;
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: #7c3aed;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #5b21b6;
+        }
+
+        .dominance-table-wrapper {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .dominance-table-wrapper table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .dominance-table-wrapper th {
+            background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+            padding: 12px 10px;
+            text-align: center;
+            font-weight: 600;
+            color: #7c3aed;
+            border-bottom: 2px solid #ddd6fe;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .dominance-table-wrapper td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #f3e8ff;
+            color: var(--secondary);
+        }
+
+        .dominance-A {
+            background: rgba(34, 197, 94, 0.1);
+            color: #15803d;
+            font-weight: 600;
+        }
+
+        .dominance-B {
+            background: rgba(59, 130, 246, 0.1);
+            color: #1e40af;
+            font-weight: 600;
+        }
+
+        .dominance-None {
+            background: rgba(156, 163, 175, 0.1);
+            color: #4b5563;
+        }
+
+        .dominance-export-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .dominance-export-buttons button {
+            flex: 1;
+            padding: 12px 24px !important;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            cursor: pointer;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            transition: all 0.3s !important;
+        }
+
+        .dominance-export-buttons button:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3) !important;
+        }
+
+        @media (max-width: 1200px) {
+            .dominance-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .dominance-container {
+                grid-template-columns: 1fr;
+            }
+
+            .dominance-container button {
+                grid-column: span 1 !important;
+            }
+        }
+        
         /* 響應式設計 */
         @media (max-width: 1024px) {
             .results-grid {
@@ -631,123 +1072,720 @@
 </head>
 <body>
 
-<div class="container">
-    <div class="mode-selector">
-        <button class="mode-btn active" onclick="switchMode('SMA')">SMA 簡單均線</button>
-        <button class="mode-btn" onclick="switchMode('WMA')">WMA 加權均線</button>
-        <button class="mode-btn" onclick="switchMode('EMA')">EMA 指數均線</button>
-    </div>
-    
-    <h1 id="pageTitle">SMA 均線回測系統</h1>
-
-    <div class="input-section">
-        <div class="input-group"><label>初始資金</label><input id="initialCash" type="number" value="10000"></div>
-        <div class="input-group"><label>選擇公司</label><select id="companySelect"><option>請先上傳 CSV</option></select></div>
-        <div class="input-group"><label>起始日期</label><input id="startDate" type="date" value="2024-01-01"></div>
-        <div class="input-group"><label>結束日期</label><input id="endDate" type="date" value="2024-12-31"></div>
-        <div class="input-group"><label>手續費 (%)</label><input id="commission" type="number" value="0.08" step="0.01"></div>
-        <div class="input-group" style="grid-column: span 2;"><label>上傳 CSV 檔案</label><input id="csvFile" type="file" accept=".csv"></div>
-        <button id="runBtn" onclick="runOptimization()">開始全參數最佳化</button>
-    </div>
-
-    <div id="querySection">
-        <h3>🎯 快速查詢組合排名</h3>
-        
-        <!-- 模式切換標籤 -->
-        <div class="query-mode-tabs">
-            <button class="query-mode-tab active" onclick="switchQueryMode('single')">📍 單個查詢</button>
-            <button class="query-mode-tab" onclick="switchQueryMode('batch')">📋 批量查詢</button>
+<!-- 頂部導航欄 -->
+<nav class="navbar">
+    <div class="navbar-content">
+        <div class="navbar-title">📈 均線回測分析系統</div>
+        <div class="navbar-menu">
+            <button class="navbar-btn active" onclick="switchView('home')">🏠 首頁</button>
+            <button class="navbar-btn" onclick="switchView('backtest')">📊 回測系統</button>
+            <button class="navbar-btn" onclick="switchView('comprehensive')">🔍 綜合回測</button>
+            <button class="navbar-btn" onclick="switchView('dominance')">⚔️ 支配比較</button>
         </div>
-        
-        <!-- 單個查詢模式 -->
-        <div id="singleQueryMode" class="query-mode-content">
-            <div class="query-container">
+    </div>
+</nav>
+
+<!-- 主容器 -->
+<div class="main-container">
+
+    <!-- 首頁視圖 -->
+    <div id="homeView" class="view active">
+        <div class="home-view">
+            <div class="home-header">
+                <h1>🎯 均線回測分析系統</h1>
+                <p>專業的股票均線策略回測平台，支持多種均線類型和支配關係分析</p>
+            </div>
+
+            <h2 style="font-size: 28px; margin: 50px 0 30px; color: var(--primary); text-align: center;">選擇功能</h2>
+            <div class="mode-grid">
+                <button class="mode-card" onclick="switchView('backtest')" style="border: none; background: white; padding: 40px 24px; border-radius: 16px; cursor: pointer;">
+                    <div class="mode-card-icon">📊</div>
+                    <h2>均線回測</h2>
+                    <p>支持 SMA、EMA、WMA、價量分析等多種策略，全參數最佳化</p>
+                </button>
+
+                <button class="mode-card" onclick="switchView('comprehensive')" style="border: none; background: white; padding: 40px 24px; border-radius: 16px; cursor: pointer;">
+                    <div class="mode-card-icon">📈</div>
+                    <h2>綜合回測</h2>
+                    <p>整合多種分析方法，提供全面的策略</p>
+                </button>
+
+                <button class="mode-card" onclick="switchView('dominance')" style="border: none; background: white; padding: 40px 24px; border-radius: 16px; cursor: pointer;">
+                    <div class="mode-card-icon">⚔️</div>
+                    <h2>支配關係比較</h2>
+                    <p>比較不同模式的性能表現，找出最優策略組合</p>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回測系統視圖 -->
+    <div id="backtestView" class="view">
+        <div class="container">
+            <div class="mode-selector">
+                <button class="mode-btn active" onclick="switchMode('SMA')">SMA 簡單均線</button>
+                <button class="mode-btn" onclick="switchMode('WMA')">WMA 加權均線</button>
+                <button class="mode-btn" onclick="switchMode('EMA')">EMA 指數均線</button>
+                <button class="mode-btn" onclick="switchMode('VP')">價量分析</button>
+                <button class="mode-btn" onclick="switchMode('VP2')">量價分析2</button>
+            </div>
+            
+            <h1 id="pageTitle">SMA 均線回測系統</h1>
+
+            <div class="input-section">
+                <div class="input-group"><label>初始資金</label><input id="initialCash" type="number" value="10000"></div>
+                <div class="input-group"><label>選擇公司</label><select id="companySelect"><option>請先上傳 CSV</option></select></div>
+                <div class="input-group"><label>成交量欄位</label><select id="volumeSelect"><option value="">不顯示成交量</option></select></div>
+                <div class="input-group"><label>起始日期</label><input id="startDate" type="date" value="2020-01-01"></div>
+                <div class="input-group"><label>結束日期</label><input id="endDate" type="date" value="2020-12-31"></div>
+                <div class="input-group"><label>手續費 (%)</label><input id="commission" type="number" value="0.08" step="0.01"></div>
+                <div class="input-group" style="grid-column: span 2;"><label>上傳檔案 (CSV / Excel)</label><input id="csvFile" type="file" accept=".csv,.xlsx,.xls"></div>
+                <button id="runBtn" onclick="runOptimization()">開始全參數最佳化</button>
+            </div>
+
+            <div id="querySection" class="hidden">
+                <h3>🎯 快速查詢組合排名</h3>
+                <div class="query-mode-tabs">
+                    <button class="query-mode-tab active" onclick="switchQueryMode('single')">📍 單個查詢</button>
+                    <button class="query-mode-tab" onclick="switchQueryMode('batch')">📋 批量查詢</button>
+                </div>
+                <div id="singleQueryMode" class="query-mode-content">
+                    <div class="query-container">
+                        <div class="input-group">
+                            <label>輸入組合 (短/長)</label>
+                            <input id="queryInput" type="text" placeholder="例：5/20" value="">
+                        </div>
+                        <button onclick="quickQuery()">查詢</button>
+                        <div id="queryResult"></div>
+                    </div>
+                </div>
+                <div id="batchQueryMode" class="query-mode-content" style="display: none;">
+                    <div class="batch-query-container">
+                        <div class="batch-query-input-area">
+                            <label style="color: rgba(255, 255, 255, 0.9); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">批量輸入 (每行一個組合)</label>
+                            <textarea id="batchQueryInput" placeholder="5/20&#10;10/30&#10;3/15&#10;7/25"></textarea>
+                        </div>
+                        <div class="batch-query-result">
+                            <button onclick="batchQuery()" class="batch-query-button">批量查詢</button>
+                            <div id="batchQueryResult"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-wrapper" id="progWrapper">
+                <label id="progLabel">計算進度...</label>
+                <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+            </div>
+
+            <div class="results-grid">
+                <div class="side-panel">
+                    <div id="bestResult" class="stats-card">尚未執行</div>
+                    <h3>🏆 排行榜</h3>
+                    <div class="rank-table-wrapper">
+                        <table id="topTable">
+                            <thead><tr><th>排名</th><th>短/長</th><th>交易筆數</th><th>最終資產</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <div id="chartContainer"><canvas id="mainChart"></canvas></div>
+                    <div id="volumeChartContainer" style="display: none;"><canvas id="volumeChart"></canvas></div>
+                    <h3 id="tableTitle">📑 交易明細</h3>
+                    <div class="trade-table-wrapper">
+                        <table id="tradeTable">
+                            <thead><tr><th>日期</th><th>動作</th><th>價格</th><th>股數</th><th>獲利</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-grid" id="chartGrid" style="display: none;">
+                <div class="chart-card">
+                    <div class="chart-title">📊 2D 熱力圖 - 參數與獲利</div>
+                    <div id="scatter2dChart"></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">🎮 3D 表面圖 - 參數優化空間</div>
+                    <div id="canvas3d"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 綜合回測視圖 -->
+    <div id="comprehensiveView" class="view">
+        <div class="container-fluid" style="max-width: 1800px; padding: 30px 20px;">
+            <h1 style="font-size: 32px; margin-bottom: 30px; color: var(--primary);">📈 綜合回測分析</h1>
+            
+            <!-- CSV 上傳區 -->
+            <div style="background: white; padding: 20px; border-radius: 12px; border: 2px solid #4ecdc4; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <span style="font-size: 20px;">📁</span>
+                    <h3 style="margin: 0; color: var(--primary);">上傳數據</h3>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <input id="comprehensiveCsvFile" type="file" accept=".csv,.xlsx,.xls" style="flex: 1;">
+                    <button id="compCsvUploadBtn" onclick="document.getElementById('comprehensiveCsvFile').click()" style="background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%); padding: 10px 20px; width: auto; min-width: 120px; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">選擇檔案</button>
+                </div>
+                <div id="compCsvStatusPanel" style="display: none; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-top: 12px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span id="compCsvStatusIcon" style="font-size: 18px;">✔️</span>
+                        <span id="compCsvStatusText" style="font-weight: 600; color: #16a34a;">檔案載入成功</span>
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>📄 檔案: <span id="compCsvFileName" style="font-weight: 600; color: #1f2937;">-</span></div>
+                        <div>📊 資料行: <span id="compCsvRowCount" style="font-weight: 600; color: #1f2937;">-</span></div>
+                        <div>📋 欄位數: <span id="compCsvColCount" style="font-weight: 600; color: #1f2937;">-</span></div>
+                        <div>✅ 股票數: <span id="compCsvCompanyCount" style="font-weight: 600; color: #1f2937;">-</span></div>
+                    </div>
+                </div>
+                <div id="compCsvErrorPanel" style="display: none; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 12px 16px; margin-top: 12px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 18px;">❌</span>
+                        <div>
+                            <div id="compCsvErrorTitle" style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">上傳失敗</div>
+                            <div id="compCsvErrorMsg" style="font-size: 12px; color: #7f1d1d;">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 數據選擇區 -->
+            <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div style="display: flex; flex-direction: column;">
+                        <label style="font-weight: 600; margin-bottom: 8px; color: var(--primary);">📊 選擇公司</label>
+                        <select id="compCompanySelect" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white; cursor: pointer; font-size: 14px;">
+                            <option value="">請先上傳 CSV</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <label style="font-weight: 600; margin-bottom: 8px; color: var(--primary);">📈 成交量欄位</label>
+                        <select id="compVolumeSelect" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white; cursor: pointer; font-size: 14px;">
+                            <option value="">不顯示成交量</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 參數設定面板 - 現代卡片式 -->
+            <div style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <h3 style="margin-top: 0; margin-bottom: 20px; color: var(--primary);">⚙️ 參數設定</h3>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                    <!-- MA 設定卡片 -->
+                    <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; background: #f8f9fa;">
+                        <h5 style="color: #667eea; margin-top: 0; margin-bottom: 12px;">🟦 移動平均線 (MA)</h5>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">MA 類型</label>
+                                <select id="compMAType" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                                    <option value="SMA">SMA (簡單)</option>
+                                    <option value="EMA">EMA (指數)</option>
+                                    <option value="WMA">WMA (加權)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">短期週期 (N1)</label>
+                                <input type="number" id="compShortMA" value="5" min="2" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">長期週期 (N2)</label>
+                                <input type="number" id="compLongMA" value="20" min="2" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">BB 週期</label>
+                                <input type="number" id="compBBPeriod" value="20" min="5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- KD 設定卡片 -->
+                    <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; background: #f0f4ff;">
+                        <h5 style="color: #3b82f6; margin-top: 0; margin-bottom: 12px;">🔵 KD 指標</h5>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">RSV 週期 (n)</label>
+                                <input type="number" id="compRSVN" value="9" min="2" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">超買線 (K>) [%]</label>
+                                <input type="number" id="compKDUpper" value="80" min="0" max="100" step="5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">超賣線 (K<) [%]</label>
+                                <input type="number" id="compKDLower" value="20" min="0" max="100" step="5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- RSI 設定卡片 -->
+                    <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; background: #fff5f0;">
+                        <h5 style="color: #f59e0b; margin-top: 0; margin-bottom: 12px;">🟠 RSI 指標</h5>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">RSI 週期 (n)</label>
+                                <input type="number" id="compRSIN" value="14" min="2" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">超買線 (RSI>) [%]</label>
+                                <input type="number" id="compRSIUpper" value="80" min="0" max="100" step="5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">超賣線 (RSI<) [%]</label>
+                                <input type="number" id="compRSILower" value="20" min="0" max="100" step="5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KAMA 設定卡片 -->
+                    <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; background: #f5f3ff;">
+                        <h5 style="color: #8b5cf6; margin-top: 0; margin-bottom: 12px;">🟣 KAMA 自適應均線</h5>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">KAMA 週期 (n)</label>
+                                <input type="number" id="compKAMAn" value="10" min="2" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">快速常數</label>
+                                <input type="number" id="compKAMAFast" value="2" min="0" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">緩慢常數</label>
+                                <input type="number" id="compKAMASlow" value="30" min="0" step="0.5" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 交易設定卡片 -->
+                    <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 15px; background: #f0fdf4;">
+                        <h5 style="color: #22c55e; margin-top: 0; margin-bottom: 12px;">💰 交易設定</h5>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">初始資金 ($)</label>
+                                <input type="number" id="compInitialCash" value="10000" min="1000" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">手續費 (%)</label>
+                                <input type="number" id="compTradeFee" value="0.08" min="0" step="0.01" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">開始日期</label>
+                                <input type="date" id="compStartDate" value="2020-01-01" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="font-weight: 600; display: block; margin-bottom: 3px;">結束日期</label>
+                                <input type="date" id="compEndDate" value="2020-12-31" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 策略選擇區 -->
+                <div style="background: #f0f4ff; padding: 20px; border-radius: 12px; border: 1px solid #667eea; margin-bottom: 20px;">
+                    <h4 style="margin-top: 0; margin-bottom: 15px; color: #667eea;">🎯 選擇回測策略</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #ddd;">
+                            <input type="checkbox" id="compStrategyMA" value="MA" checked style="cursor: pointer; width: 16px; height: 16px;">
+                            <span style="font-weight: 500;">📊 移動平均 (MA)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #ddd;">
+                            <input type="checkbox" id="compStrategyKD" value="KD" checked style="cursor: pointer; width: 16px; height: 16px;">
+                            <span style="font-weight: 500;">🔵 KD 指標</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #ddd;">
+                            <input type="checkbox" id="compStrategyRSI" value="RSI" checked style="cursor: pointer; width: 16px; height: 16px;">
+                            <span style="font-weight: 500;">🟠 RSI 指標</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #ddd;">
+                            <input type="checkbox" id="compStrategyMACD" value="MACD" checked style="cursor: pointer; width: 16px; height: 16px;">
+                            <span style="font-weight: 500;">📈 MACD</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: white; border-radius: 6px; border: 1px solid #ddd;">
+                            <input type="checkbox" id="compStrategyKAMA" value="KAMA" checked style="cursor: pointer; width: 16px; height: 16px;">
+                            <span style="font-weight: 500;">🟣 KAMA</span>
+                        </label>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px; color: #666;">
+                        💡 提示：勾選要使用的指標，未勾選的指標將被排除  · 
+                        <button onclick="document.querySelectorAll('[id^=compStrategy]').forEach(cb => cb.checked = true)" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; font-size: 12px; padding: 0; font-weight: 500;">全選</button>
+                        <button onclick="document.querySelectorAll('[id^=compStrategy]').forEach(cb => cb.checked = false)" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; font-size: 12px; padding: 0; margin-left: 8px; font-weight: 500;">全不選</button>
+                    </div>
+                </div>
+                
+                <!-- 操作按鈕 -->
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button onclick="runComprehensiveBacktest()" style="flex: 1; min-width: 150px; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+                        🚀 開始綜合回測
+                    </button>
+                    <button onclick="downloadComprehensiveCSV()" style="flex: 1; min-width: 150px; padding: 12px 24px; background: #4ecdc4; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+                        📥 下載結果
+                    </button>
+                </div>
+            </div>
+
+            <!-- 結果顯示區 -->
+            <div id="comprehensiveResultContainer" style="display: none;">
+                <!-- 6 個統計卡片 -->
+                <div style="display: grid; grid-template-columns: 1fr 1.8fr 1fr 1fr 1fr; gap: 20px; margin-bottom: 25px;">
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">總報酬率</div>
+                        <div id="compTotalReturn" style="font-size: 26px; font-weight: 700; color: #667eea;">-%</div>
+                    </div>
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #22c55e; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">最終資產</div>
+                        <div id="compFinalEquity" style="font-size: 24px; font-weight: 700; color: #22c55e; word-break: break-word;">$-</div>
+                    </div>
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">交易次數</div>
+                        <div id="compTradeCount" style="font-size: 26px; font-weight: 700; color: #3b82f6;">-</div>
+                    </div>
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #f59e0b; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">最大回撤</div>
+                        <div id="compMaxDrawdown" style="font-size: 26px; font-weight: 700; color: #f59e0b;">-%</div>
+                    </div>
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #8b5cf6; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">勝率</div>
+                        <div id="compWinRate" style="font-size: 26px; font-weight: 700; color: #8b5cf6;">-%</div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 25px;">
+                    <div style="background: white; padding: 24px 18px; border-radius: 8px; border-left: 4px solid #ec4899; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500;">夏普比率</div>
+                        <div id="compSharpeRatio" style="font-size: 26px; font-weight: 700; color: #ec4899;">-</div>
+                    </div>
+                </div>
+
+                <!-- 綜合對比表格 -->
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 25px;">
+                    <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">📊 綜合對比結果</h4>
+                    <div style="overflow-x: auto;">
+                        <table id="comprehensiveTable" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);">
+                                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">策略模式</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">交易次數</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">勝率(%)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">平均贏($)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">平均虧($)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">利潤因子</th>
+                                    <th style="padding: 12px; text-align: right; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">獲利($)</th>
+                                    <th style="padding: 12px; text-align: right; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">最終資產($)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">回報率(%)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">最大回撤(%)</th>
+                                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #7c3aed; border-bottom: 2px solid #ddd6fe;">夏普比率</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 圖表容器 -->
+                <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+                    <!-- 資產淨值曲線 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">📈 資產淨值曲線</h4>
+                        <div id="compEquityChart" style="width: 100%; height: 350px;"></div>
+                    </div>
+
+                    <!-- K線圖 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">🕯️ K線圖</h4>
+                        <div id="compCandleChart" style="width: 100%; height: 400px;"></div>
+                    </div>
+
+                    <!-- MA 圖 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">📊 移動平均線</h4>
+                        <div id="compMAChart" style="width: 100%; height: 350px;"></div>
+                    </div>
+
+                    <!-- KD 圖 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">🔵 KD 指標</h4>
+                        <div id="compKDChart" style="width: 100%; height: 300px;"></div>
+                    </div>
+
+                    <!-- RSI 圖 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">🟠 RSI 指標</h4>
+                        <div id="compRSIChart" style="width: 100%; height: 300px;"></div>
+                    </div>
+
+                    <!-- MACD 圖 -->
+                    <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <h4 style="padding: 15px 20px; margin: 0; background: #f8f9fa; color: var(--primary); border-bottom: 2px solid #e9ecef;">📉 MACD 指標</h4>
+                        <div id="compMACDChart" style="width: 100%; height: 300px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="comprehensiveEmptyState" style="text-align: center; padding: 80px 20px; color: #999; background: white; border-radius: 8px;">
+                <p style="font-size: 18px; margin-bottom: 20px;">📋 點擊『開始綜合回測』開始分析</p>
+                <p style="font-size: 14px; color: #bbb;">系統將使用您設定的參數進行完整的技術分析和回測</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 支配關係視圖 -->
+    <div id="dominanceView" class="view">
+        <div class="container" style="max-width: 1200px; padding: 30px 20px;">
+            <h1 style="font-size: 32px; margin-bottom: 30px; color: var(--primary);">⚔️ 支配關係比較</h1>
+            <div class="dominance-container" style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px;">
                 <div class="input-group">
-                    <label>輸入組合 (短/長)</label>
-                    <input id="queryInput" type="text" placeholder="例：5/20" value="">
+                    <label>模式 A</label>
+                    <select id="modeA">
+                        <option value="SMA">SMA 簡單均線</option>
+                        <option value="WMA">WMA 加權均線</option>
+                        <option value="EMA">EMA 指數均線</option>
+                        <option value="VP">價量分析</option>
+                        <option value="VP2">量價分析2</option>
+                    </select>
                 </div>
-                <button onclick="quickQuery()">查詢</button>
-                <div id="queryResult"></div>
+                <div class="input-group">
+                    <label>模式 B</label>
+                    <select id="modeB">
+                        <option value="EMA">EMA 指數均線</option>
+                        <option value="SMA">SMA 簡單均線</option>
+                        <option value="WMA">WMA 加權均線</option>
+                        <option value="VP">價量分析</option>
+                        <option value="VP2">量價分析2</option>
+                    </select>
+                </div>
+                <div style="flex: 0.5;"></div>
+                <button onclick="compareDominance()">開始對比</button>
             </div>
-        </div>
-        
-        <!-- 批量查詢模式 -->
-        <div id="batchQueryMode" class="query-mode-content" style="display: none;">
-            <div class="batch-query-container">
-                <div class="batch-query-input-area">
-                    <label style="color: rgba(255, 255, 255, 0.9); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">批量輸入 (每行一個組合)</label>
-                    <textarea id="batchQueryInput" placeholder="5/20&#10;10/30&#10;3/15&#10;7/25"></textarea>
+
+            <div id="dominanceEmptyState" style="text-align: center; padding: 40px 20px; color: #666; background: #f9f9f9; border-radius: 8px; margin-bottom: 30px;">
+                <p style="font-size: 16px; margin: 0 0 10px 0;">📋 說明：需要至少2個不同模式的優化結果</p>
+                <p style="font-size: 14px; margin: 5px 0; color: #999;">1. 前往『均線回測』選擇模式A（如 SMA）</p>
+                <p style="font-size: 14px; margin: 5px 0; color: #999;">2. 點擊『開始全參數最佳化』並等待完成</p>
+                <p style="font-size: 14px; margin: 5px 0; color: #999;">3. 選擇模式B（如 EMA）並再次執行優化</p>
+                <p style="font-size: 14px; margin: 5px 0; color: #999;">4. 回到『支配比較』選擇對應模式，點擊『開始對比』</p>
+            </div>
+
+            <div class="dominance-result-container" id="dominanceResultContainer" style="display: none;">
+                <div class="dominance-stats" id="dominanceStats"></div>
+                <div class="dominance-table-wrapper">
+                    <table id="dominanceTable">
+                        <thead>
+                            <tr>
+                                <th>短期</th>
+                                <th>長期</th>
+                                <th>勝率(A)</th>
+                                <th>獲利(A)</th>
+                                <th>勝率(B)</th>
+                                <th>獲利(B)</th>
+                                <th>支配關係</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
-                <div class="batch-query-result">
-                    <button onclick="batchQuery()" class="batch-query-button">批量查詢</button>
-                    <div id="batchQueryResult"></div>
+                <div class="dominance-export-buttons">
+                    <button onclick="downloadDominanceCSV()">📥 下載比較結果 CSV</button>
+                    <button onclick="toggleDetailedView()">📊 詳細檢視</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="progress-wrapper" id="progWrapper">
-        <label id="progLabel">計算進度...</label>
-        <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
-    </div>
-
-    <div class="results-grid">
-        <div class="side-panel">
-            <div id="bestResult" class="stats-card">尚未執行</div>
-            <h3>🏆 排行榜</h3>
-            <div class="rank-table-wrapper">
-                <table id="topTable">
-                    <thead><tr><th>排名</th><th>短/長</th><th>交易筆數</th><th>最終資產</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-        <div>
-            <div id="chartContainer"><canvas id="mainChart"></canvas></div>
-            <h3 id="tableTitle">📑 交易明細</h3>
-            <div class="trade-table-wrapper">
-                <table id="tradeTable">
-                    <thead><tr><th>日期</th><th>動作</th><th>價格</th><th>股數</th><th>獲利</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 新增：2D 和 3D 圖表 -->
-    <div class="chart-grid" id="chartGrid" style="display: none;">
-        <div class="chart-card">
-            <div class="chart-title">📊 2D 熱力圖 - 參數與獲利</div>
-            <div id="scatter2dChart"></div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-title">🎮 3D 表面圖 - 參數優化空間</div>
-            <div id="canvas3d"></div>
-        </div>
-    </div>
 </div>
 
 <script>
-    let g_backtestData = [], g_allMA = {}, g_startIdx = 0, g_initialCash = 0, g_commission = 0, chartInstance = null;
+    // 視圖切換函數
+    function switchView(viewName) {
+        console.log('switchView called with:', viewName);
+        const homeView = document.getElementById('homeView');
+        const backtestView = document.getElementById('backtestView');
+        const comprehensiveView = document.getElementById('comprehensiveView');
+        const dominanceView = document.getElementById('dominanceView');
+        
+        // 先移除所有view的active類
+        if (homeView) homeView.classList.remove('active');
+        if (backtestView) backtestView.classList.remove('active');
+        if (comprehensiveView) comprehensiveView.classList.remove('active');
+        if (dominanceView) dominanceView.classList.remove('active');
+        
+        // 更新 navbar 按鈕狀態
+        document.querySelectorAll('.navbar-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        if (viewName === 'home') {
+            console.log('Setting home view');
+            if (homeView) homeView.classList.add('active');
+            const btns = document.querySelectorAll('.navbar-btn');
+            if (btns[0]) btns[0].classList.add('active');
+        } else if (viewName === 'backtest') {
+            console.log('Setting backtest view');
+            if (backtestView) backtestView.classList.add('active');
+            const btns = document.querySelectorAll('.navbar-btn');
+            if (btns[1]) btns[1].classList.add('active');
+            updateModeUI();
+        } else if (viewName === 'comprehensive') {
+            console.log('Setting comprehensive view');
+            if (comprehensiveView) comprehensiveView.classList.add('active');
+            const btns = document.querySelectorAll('.navbar-btn');
+            if (btns[2]) btns[2].classList.add('active');
+        } else if (viewName === 'dominance') {
+            console.log('Setting dominance view');
+            if (dominanceView) dominanceView.classList.add('active');
+            const btns = document.querySelectorAll('.navbar-btn');
+            if (btns[3]) btns[3].classList.add('active');
+        }
+        console.log('View switch complete for:', viewName);
+    }
+
+    function startBacktest(mode) {
+        g_currentMode = mode;
+        switchView('backtest');
+        updateModeUI();
+    }
+
+    function switchToBacktest(mode) {
+        g_currentMode = mode;
+        switchView('backtest');
+        updateModeUI();
+    }
+
+    function switchToDominance() {
+        switchView('dominance');
+    }
+
+    function updateModeUI() {
+        const titles = {
+            'SMA': 'SMA 均線回測系統',
+            'WMA': 'WMA 均線回測系統',
+            'EMA': 'EMA 均線回測系統',
+            'VP': '價量分析系統',
+            'VP2': '量價分析2系統'
+        };
+        const titleEl = document.getElementById('pageTitle');
+        if (titleEl) {
+            titleEl.innerText = titles[g_currentMode] || '均線回測系統';
+        }
+        
+        document.querySelectorAll('.mode-selector .mode-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.textContent.includes(g_currentMode)) {
+                btn.classList.add('active');
+            }
+        });
+    }
+
+    // 公司名稱映射表
+    const COMPANY_NAMES = {
+        'AAPL': 'Apple Inc.',
+        'AMGN': 'Amgen Inc.',
+        'AMZN': 'Amazon.com Inc.',
+        'AXP': 'American Express',
+        'BA': 'Boeing Co.',
+        'CAT': 'Caterpillar Inc.',
+        'CRM': 'Salesforce Inc.',
+        'CSCO': 'Cisco Systems',
+        'CVX': 'Chevron Corp.',
+        'DIS': 'Walt Disney Co.',
+        'GS': 'Goldman Sachs',
+        'HD': 'Home Depot',
+        'HON': 'Honeywell',
+        'IBM': 'IBM Corp.',
+        'JNJ': 'Johnson & Johnson',
+        'JPM': 'JPMorgan Chase',
+        'KO': 'Coca-Cola Co.',
+        'MCD': 'McDonald\'s Corp.',
+        'MMM': '3M Company',
+        'MRK': 'Merck & Co.',
+        'MSFT': 'Microsoft Corp.',
+        'NKE': 'Nike Inc.',
+        'NVDA': 'NVIDIA Corp.',
+        'PG': 'Procter & Gamble',
+        'SHW': 'Sherwin-Williams',
+        'TRV': 'Travelers Companies',
+        'UNH': 'UnitedHealth Group',
+        'V': 'Visa Inc.',
+        'VZ': 'Verizon',
+        'WMT': 'Walmart Inc.'
+    };
+
+    // === CSV 數據存儲 ===
+    window.csvHeaders = [];  // CSV頭部列表
+    window.jsonData = [];    // CSV數據列表（不含頭部）
+
+    let g_backtestData = [], g_startIdx = 0, g_initialCash = 0, g_commission = 0, chartInstance = null;
     let g_currentMode = 'SMA';
-    let g_allResults = []; // 存储所有优化结果用于绘图
-    let g_rankedResults = []; // 存储排序后的所有结果用于快速查询
+    let g_allMA_byMode = {  // 按模式存储 MA 数据
+        'SMA': {}, 'EMA': {}, 'WMA': {}, 'VP': {}, 'VP2': {}
+    };
+    let g_allResults_byMode = {  // 按模式存储优化结果（用于绘图）
+        'SMA': [], 'EMA': [], 'WMA': [], 'VP': [], 'VP2': []
+    };
+    let g_rankedResults_byMode = {  // 按模式存储排序后的结果（用于快速查询）
+        'SMA': [], 'EMA': [], 'WMA': [], 'VP': [], 'VP2': []
+    };
+    let g_unrankedResults_byMode = {  // 按模式存储按参数顺序的结果（用于支配关系对比）
+        'SMA': [], 'EMA': [], 'WMA': [], 'VP': [], 'VP2': []
+    };
+    // 为向后兼容性，提供全局引用
+    let g_allMA = g_allMA_byMode['SMA'];
+    let g_allResults = g_allResults_byMode['SMA'];
+    let g_rankedResults = g_rankedResults_byMode['SMA'];
     const MAX_PERIOD = 256;
+    
+    // 從欄位名稱提取公司代碼
+    function getCompanyCode(fieldName) {
+        // fieldName 通常是 "AAPL_Close", "AAPL_Volume" 等
+        const parts = fieldName.split('_');
+        return parts[0];
+    }
+    
+    // 生成公司名稱標籤
+    function getCompanyLabel(fieldName) {
+        const code = getCompanyCode(fieldName);
+        const name = COMPANY_NAMES[code] || code;
+        return `${code} - ${name}`;
+    }
 
     function switchMode(mode) {
         g_currentMode = mode;
-        const title = mode === 'SMA' ? 'SMA 均線回測系統' : (mode === 'WMA' ? 'WMA 均線回測系統' : 'EMA 均線回測系統');
+        let title;
+        if (mode === 'SMA') title = 'SMA 均線回測系統';
+        else if (mode === 'WMA') title = 'WMA 均線回測系統';
+        else if (mode === 'EMA') title = 'EMA 均線回測系統';
+        else if (mode === 'VP') title = '價量分析系統';
+        else if (mode === 'VP2') title = '量價分析2系統';
+        else title = '均線回測系統';
         document.getElementById('pageTitle').innerText = title;
         
         document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
         event.target.classList.add('active');
         
-        document.getElementById('bestResult').innerHTML = '尚未執行';
-        document.querySelector("#topTable tbody").innerHTML = '';
-        document.querySelector("#tradeTable tbody").innerHTML = '';
+        // 恢復該模式的所有數據（不清空，直接指向）
+        g_allMA = g_allMA_byMode[mode];
+        g_allResults = g_allResults_byMode[mode];
+        g_rankedResults = g_rankedResults_byMode[mode];
+        
+        // 根據是否有數據決定顯示什麼
+        if (g_rankedResults.length > 0) {
+            // 有數據：顯示排名表和最優參數
+            document.getElementById('bestResult').innerHTML = '尚未執行';
+            updateRankTable(g_rankedResults.slice(0, 65536));
+            showSpecificResult(g_rankedResults[0].s, g_rankedResults[0].l, 1, null, g_commission);
+        } else {
+            // 無數據：清空所有顯示
+            document.getElementById('bestResult').innerHTML = '尚未執行';
+            document.querySelector("#topTable tbody").innerHTML = '';
+            document.querySelector("#tradeTable tbody").innerHTML = '';
+        }
+        
         if (chartInstance) chartInstance.destroy();
+        if (window.volumeChartInstance) window.volumeChartInstance.destroy();
         document.getElementById('chartGrid').style.display = 'none';
-        g_allMA = {};
+        document.getElementById('volumeChartContainer').style.display = 'none';
         document.getElementById('querySection').classList.add('hidden');
         document.getElementById('queryResult').innerHTML = '';
     }
@@ -765,14 +1803,77 @@
     }
 
     document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
         const reader = new FileReader();
-        reader.onload = function(event) {
-            const lines = event.target.result.trim().split("\n");
-            window.csvHeaders = lines[0].split(",").map(h => h.trim());
-            window.csvRaw = lines.slice(1).map(line => line.split(","));
-            document.getElementById("companySelect").innerHTML = window.csvHeaders.slice(1).map(h => `<option value="${h}">${h}</option>`).join('');
-        };
-        reader.readAsText(e.target.files[0]);
+        const fileName = file.name.toLowerCase();
+        
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            // 處理 Excel 文件
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length < 2) {
+                        alert('Excel 文件格式錯誤：至少需要 2 行資料（標題 + 資料）');
+                        return;
+                    }
+                    
+                    window.csvHeaders = jsonData[0].map(h => String(h).trim());
+                    window.csvRaw = jsonData.slice(1).map(row => row.map(cell => String(cell)));
+                    
+                    // 優先顯示 Close 列（收盤價）
+                    const allHeaders = window.csvHeaders.slice(1);
+                    const closeColumns = allHeaders.filter(h => h.toUpperCase().includes('CLOSE'));
+                    const displayHeaders = closeColumns.length > 0 ? closeColumns : allHeaders;
+                    
+                    document.getElementById("companySelect").innerHTML = displayHeaders.map(h => 
+                        `<option value="${h}">${getCompanyLabel(h)}</option>`
+                    ).join('');
+                    
+                    // 建立成交量下拉菜單
+                    const volumeColumns = allHeaders.filter(h => h.toUpperCase().includes('VOLUME'));
+                    const defaultVolume = volumeColumns.length > 0 ? volumeColumns[0] : '';
+                    document.getElementById("volumeSelect").innerHTML = 
+                        volumeColumns.map(h => `<option value="${h}" ${h === defaultVolume ? 'selected' : ''}>${getCompanyLabel(h)}</option>`).join('') +
+                        '<option value="">不顯示成交量</option>';
+                    document.getElementById("volumeSelect").value = defaultVolume;
+                    
+                    console.log('✓ Excel 文件載入成功\n已找到欄位:', displayHeaders);
+                } catch (err) {
+                    alert(`Excel 解析錯誤: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            // 處理 CSV 文件
+            reader.onload = function(event) {
+                const lines = event.target.result.trim().split("\n");
+                window.csvHeaders = lines[0].split(",").map(h => h.trim());
+                window.csvRaw = lines.slice(1).map(line => line.split(","));
+                
+                const allHeaders = window.csvHeaders.slice(1);
+                const closeColumns = allHeaders.filter(h => h.toUpperCase().includes('CLOSE'));
+                const displayHeaders = closeColumns.length > 0 ? closeColumns : allHeaders;
+                
+                document.getElementById("companySelect").innerHTML = displayHeaders.map(h => `<option value="${h}">${getCompanyLabel(h)}</option>`).join('');
+                
+                // 建立成交量下拉菜單
+                const volumeColumns = allHeaders.filter(h => h.toUpperCase().includes('VOLUME'));
+                const defaultVolume = volumeColumns.length > 0 ? volumeColumns[0] : '';
+                document.getElementById("volumeSelect").innerHTML = 
+                    volumeColumns.map(h => `<option value="${h}" ${h === defaultVolume ? 'selected' : ''}>${getCompanyLabel(h)}</option>`).join('') +
+                    '<option value="">不顯示成交量</option>';
+                document.getElementById("volumeSelect").value = defaultVolume;
+                    
+                console.log('✓ CSV 文件載入成功');
+            };
+            reader.readAsText(file);
+        }
     });
 
     function precomputeSMA(data, period) {
@@ -872,52 +1973,319 @@
         return ema;
     }
 
-    function backtest(data, maS, maL, initialCash, startIdx, commission, recordTrades = false) {
+    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP') {
         const COMMISSION = commission / 100;
         let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
         let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
+        
+        // 提取成交量数据 - 高效的日期映射（避免嵌套循环和索引错乱）
+        const volumeData = volumeHeaderIndex >= 0 ? 
+            (() => {
+                const dateMap = new Map();
+                for (let i = 0; i < window.csvRaw.length; i++) {
+                    const dateStr = window.csvRaw[i][0];
+                    if (dateStr && !dateMap.has(dateStr)) {
+                        dateMap.set(dateStr, i);
+                    }
+                }
+                return data.map(d => {
+                    const csvRawIdx = dateMap.get(d.date);
+                    if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
+                        const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
+                        return isNaN(vol) ? 0 : vol;
+                    }
+                    return 0;
+                });
+            })() : null;
+        
+        const volumeMA = volumeData ? SMA(volumeData, Math.max(lPeriod, 1)) : null; // 成交量的移動平均，用於 VP2 模式
+        
+        // 找到第一个有效数据的索引
+        let validStartIdx = startIdx;
+        while (validStartIdx < data.length - 1) {
+            if (maS[validStartIdx] === null || maL[validStartIdx] === null) {
+                validStartIdx++;
+                continue;
+            }
+            if (validStartIdx === startIdx) {
+                validStartIdx++;
+                continue;
+            }
+            if (maS[validStartIdx-1] === null || maL[validStartIdx-1] === null) {
+                validStartIdx++;
+                continue;
+            }
+            break;
+        }
+        
+        const getRel = (short, long) => {
+            const diff = short - long;
+            const epsilon = 1e-9;
+            if (Math.abs(diff) < epsilon) return 0;
+            return diff < 0 ? -1 : 1;
+        };
+        
+        const updateMetrics = (currentVal) => {
+            maxValue = Math.max(maxValue, currentVal);
+            maxDD = Math.max(maxDD, (maxValue - currentVal) / maxValue);
+        };
+        
+        const getPortfolioValue = (currentPrice) => cash + (shares * currentPrice);
+        
+        const processBuy = (currPrice, currDate, isLast, idx) => {
+            if (!hasPos && !isLast) {
+                shares = Math.floor(cash / (currPrice * (1 + COMMISSION)));
+                if (shares > 0) {
+                    let cost = shares * currPrice * (1 + COMMISSION);
+                    distCap = cash; cash -= cost; hasPos = true; tradeCount++;
+                    const portfolioVal = cash;
+                    if (recordTrades) trades.push({ date: currDate, action: '買入', price: currPrice, shares, portfolio: portfolioVal });
+                }
+            }
+        };
+        
+        const processSell = (currPrice, currDate) => {
+            if (hasPos) {
+                let sellVal = shares * currPrice * (1 - COMMISSION);
+                let profit = (cash + sellVal) - distCap;
+                const portfolioVal = cash + sellVal;
+                tradeCount++;
+                if (recordTrades) trades.push({ date: currDate, action: '賣出', price: currPrice, shares, profit: profit, portfolio: portfolioVal });
+                cash += sellVal; shares = 0; hasPos = false;
+            }
+        };
+        
+        let overlapDay = -1, beforeOverlapRel = 0, overlapVal = 0;
 
-        for (let i = startIdx; i < data.length; i++) {
+        for (let i = validStartIdx; i < data.length; i++) {
             const price = data[i].close;
             const isLastDay = (i === data.length - 1);
             
-            // 交叉檢測：比較前一天和今天的相對位置（第一天無法比較，從第二天開始）
-            if (i > startIdx && maS[i] !== null && maL[i] !== null && maS[i-1] !== null && maL[i-1] !== null) {
-                // 黃金交叉：前一天短線在下，今天短線真正穿過長線（不含重疊）
-                if (maS[i-1] <= maL[i-1] && maS[i] > maL[i]) {
-                    allCrosses.push({ date: data[i].date, type: 'gold', val: maS[i] });
-                    if (!hasPos && !isLastDay) {
-                        shares = Math.floor(cash / (price * (1 + COMMISSION)));
-                        if (shares > 0) {
-                            let cost = shares * price * (1 + COMMISSION);
-                            distCap = cash; cash -= cost; hasPos = true;
-                            tradeCount++;
-                            if (recordTrades) trades.push({ date: data[i].date, action: '買入', price, shares });
-                        }
+            // 檢查交叉信號 - 確保當前和前一天的MA值都存在
+            // 注意：for循環已經從validStartIdx開始，所以這裡不需要再檢查 i >= startIdx
+            if (maS[i] !== null && maL[i] !== null && 
+                i > 0 && maS[i-1] !== null && maL[i-1] !== null) {
+                const prevRel = getRel(maS[i-1], maL[i-1]);
+                const currRel = getRel(maS[i], maL[i]);
+                
+                const volumeValid = strategyMode === 'VP2'
+                    ? (volumeData && volumeMA && volumeMA[i] !== null ? volumeData[i] > volumeMA[i] : true)
+                    : (volumeData ? volumeData[i] > volumeData[i-1] : true);
+                
+                // 黃金交叉 + 成交量條件
+                if (prevRel === -1 && currRel === 0) {
+                    overlapDay = i;
+                    beforeOverlapRel = -1;
+                    overlapVal = +maS[i].toFixed(9);
+                } 
+                else if (overlapDay > 0 && i === overlapDay + 1 && beforeOverlapRel === -1) {
+                    if (currRel > 0 && volumeValid) {
+                        allCrosses.push({ date: data[i].date, type: 'gold', val: overlapVal });
+                        processBuy(price, data[i].date, isLastDay, i);
                     }
+                    overlapDay = -1;
+                } 
+                else if (prevRel === -1 && currRel > 0 && overlapDay === -1 && volumeValid) {
+                    allCrosses.push({ date: data[i].date, type: 'gold', val: +maS[i].toFixed(9) });
+                    processBuy(price, data[i].date, isLastDay, i);
                 }
-                // 死亡交叉：前一天短線在上，今天短線真正穿過長線（不含重疊）
-                else if (maS[i-1] >= maL[i-1] && maS[i] < maL[i]) {
-                    allCrosses.push({ date: data[i].date, type: 'death', val: maS[i] });
-                    if (hasPos) {
-                        let sellVal = shares * price * (1 - COMMISSION);
-                        let profit = (cash + sellVal) - distCap;
-                        tradeCount++;
-                        if (recordTrades) trades.push({ date: data[i].date, action: '賣出', price, shares, profit: profit });
-                        cash += sellVal; shares = 0; hasPos = false;
+                
+                // 死亡交叉（VP2 模式需要成交量條件）
+                if (prevRel === 1 && currRel === 0) {
+                    overlapDay = i;
+                    beforeOverlapRel = 1;
+                    overlapVal = +maS[i].toFixed(9);
+                } 
+                else if (overlapDay > 0 && i === overlapDay + 1 && beforeOverlapRel === 1) {
+                    if (currRel < 0 && (strategyMode !== 'VP2' || volumeValid)) {                   //賣出不加成交量：if (currRel < 0) ||||| 賣出加成交量：if (currRel < 0 && (strategyMode !== 'VP2' || volumeValid))
+                        allCrosses.push({ date: data[i].date, type: 'death', val: overlapVal });
+                        processSell(price, data[i].date);
                     }
+                    overlapDay = -1;
+                } 
+                else if (prevRel === 1 && currRel < 0 && overlapDay === -1 && (strategyMode !== 'VP2' || volumeValid)) {  //賣出不加成交量：else if (prevRel === 1 && currRel < 0 && overlapDay === -1) ||||| 賣出加成交量：else if (prevRel === 1 && currRel < 0 && overlapDay === -1 && (strategyMode !== 'VP2' || volumeValid)) 
+                    processSell(price, data[i].date);
                 }
             }
             
             if (hasPos && isLastDay) {
                 let sellVal = shares * price * (1 - COMMISSION);
                 tradeCount++;
-                if (recordTrades) trades.push({ date: data[i].date, action: '賣出(平倉)', price, shares, profit: (cash + sellVal) - distCap });
+                const portfolioVal = cash + sellVal;
+                if (recordTrades) trades.push({ date: data[i].date, action: '賣出(平倉)', price, shares, profit: (cash + sellVal) - distCap, portfolio: portfolioVal });
                 cash += sellVal; shares = 0; hasPos = false;
             }
-            let currentVal = cash + (shares * price);
+            updateMetrics(getPortfolioValue(price));
+        }
+        return { finalAsset: cash, maxDD: maxDD * 100, trades, allCrosses, tradeCount };
+    }
+
+    function backtest(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = null, lPeriod = null) {
+        const COMMISSION = commission / 100;
+        let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
+        let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
+        
+        // 檢測參數反轉：如果短線周期 > 長線周期，則反轉交易邏輯
+        const isReversed = sPeriod && lPeriod && sPeriod > lPeriod;
+        
+        if (isReversed && recordTrades) {
+            console.log(`🔄 參數反轉模式：短線${sPeriod} > 長線${lPeriod}，交易邏輯將反轉`);
+        }
+        
+        // 找到第一個有效數據的索引 (確保MA值不為null) 
+        // 重要：用戶選擇的起始日期本身就是"第一天"，第一天不會有交叉信號
+        let validStartIdx = startIdx;
+        while (validStartIdx < data.length - 1) {
+            // 檢查當前天的MA值是否存在
+            if (maS[validStartIdx] === null || maL[validStartIdx] === null) {
+                validStartIdx++;
+                continue;
+            }
+            
+            // 檢查是否為用戶選擇的起始日期（第一天無法交叉）
+            if (validStartIdx === startIdx) {
+                validStartIdx++;
+                continue;
+            }
+            
+            // 檢查前一天的MA值是否存在
+            if (maS[validStartIdx-1] === null || maL[validStartIdx-1] === null) {
+                validStartIdx++;
+                continue;
+            }
+            
+            // 所有條件滿足，找到有效的交易起始日
+            break;
+        }
+        
+        const isUserFirstDay = validStartIdx > startIdx;
+        console.log(`index.backtest: startIdx=${startIdx}, validStartIdx=${validStartIdx}, ${isUserFirstDay ? '已跳過用戶選擇的第一天' : '正常交叉檢測'}`);
+        
+        // 調試：檢查第一個有效交易日的MA值
+        if (validStartIdx < data.length && recordTrades) {
+            console.log(`第一個有效交易日 ${data[validStartIdx]?.date}: maS[${validStartIdx-1}]=${maS[validStartIdx-1]?.toFixed(2)} -> maS[${validStartIdx}]=${maS[validStartIdx]?.toFixed(2)}, maL[${validStartIdx-1}]=${maL[validStartIdx-1]?.toFixed(2)} -> maL[${validStartIdx}]=${maL[validStartIdx]?.toFixed(2)}`);
+        }
+        
+        // 計算MA關係的輔助函數 (-1: <, 0: =, 1: >) - 使用epsilon避免浮點精度誤差
+        const epsilon = 1e-9;
+        const getRel = (short, long) => {
+            const diff = short - long;
+            if (Math.abs(diff) < epsilon) return 0; // 相等（容忍精度誤差）
+            return diff < 0 ? -1 : 1;
+        };
+        
+        // 計算資產和風險指標的輔助函數 (JS風格)
+        const updateMetrics = (currentVal) => {
             maxValue = Math.max(maxValue, currentVal);
             maxDD = Math.max(maxDD, (maxValue - currentVal) / maxValue);
+        };
+        
+        const getPortfolioValue = (currentPrice) => cash + (shares * currentPrice);
+        
+        // 買賣邏輯的輔助函數
+        const processBuy = (currPrice, currDate, isLast, idx) => {
+            if (!hasPos && !isLast) {
+                shares = Math.floor(cash / (currPrice * (1 + COMMISSION)));
+                if (shares > 0) {
+                    let cost = shares * currPrice * (1 + COMMISSION);
+                    distCap = cash; cash -= cost; hasPos = true; tradeCount++;
+                    const portfolioVal = cash;
+                    console.log(`  >>> BUY: ${currDate} price=${currPrice.toFixed(2)} shares=${shares} cash=${cash.toFixed(2)} portfolio=${portfolioVal.toFixed(2)}`);
+                    if (recordTrades) trades.push({ date: currDate, action: '買入', price: currPrice, shares, portfolio: portfolioVal });
+                }
+            }
+        };
+        
+        const processSell = (currPrice, currDate) => {
+            if (hasPos) {
+                let sellVal = shares * currPrice * (1 - COMMISSION);
+                let profit = (cash + sellVal) - distCap;
+                const portfolioVal = cash + sellVal;
+                tradeCount++;
+                console.log(`  >>> SELL: ${currDate} price=${currPrice.toFixed(2)} shares=${shares} profit=${profit.toFixed(2)} portfolio=${portfolioVal.toFixed(2)}`);
+                if (recordTrades) trades.push({ date: currDate, action: '賣出', price: currPrice, shares, profit: profit, portfolio: portfolioVal });
+                cash += sellVal; shares = 0; hasPos = false;
+            }
+        };
+        
+        // 追蹤重疊狀態
+        let overlapDay = -1, beforeOverlapRel = 0, overlapVal = 0;
+
+        for (let i = validStartIdx; i < data.length; i++) {
+            const price = data[i].close;
+            const isLastDay = (i === data.length - 1);
+            
+            // 檢查交叉信號 - 確保當前和前一天的MA值都存在
+            // 注意：for循環已經從validStartIdx開始，所以這裡不需要再檢查 i >= startIdx
+            if (maS[i] !== null && maL[i] !== null && 
+                i > 0 && maS[i-1] !== null && maL[i-1] !== null) {
+                const prevRel = getRel(maS[i-1], maL[i-1]);
+                const currRel = getRel(maS[i], maL[i]);
+                
+                // 調試輸出 - 檢查所有交叉點
+                if (prevRel !== currRel || currRel === 0) {
+                    console.log(`[${data[i].date}] i=${i} prevRel=${prevRel} currRel=${currRel} maS[i-1]=${maS[i-1]?.toFixed(2)} maS[i]=${maS[i]?.toFixed(2)} maL[i-1]=${maL[i-1]?.toFixed(2)} maL[i]=${maL[i]?.toFixed(2)} price=${price.toFixed(2)} ${isReversed ? '(反轉參數)' : ''}`);
+                }
+                
+                // 交叉邏輯：無論參數是否反轉，都使用相同的買賣信號判斷
+                // 黃金交叉：短線向上穿越長線 → 買入
+                // 死亡交叉：短線向下穿越長線 → 賣出
+                
+                // 黃金交叉判斷邏輯
+                // 情況1：當天重疊 (短線穿過長線但相等) → 記錄重疊日期、MA值(9位小數)，等隔天確認
+                if (prevRel === -1 && currRel === 0) {
+                    overlapDay = i;
+                    beforeOverlapRel = -1;
+                    overlapVal = +maS[i].toFixed(9);
+                } 
+                // 情況2：隔一天確認 (i === overlapDay + 1)
+                //   - 如果有交叉 (currRel > 0)：交易，使用重叠時的MA值(9位小數)
+                //   - 如果無交叉：不交易，重置狀態
+                else if (overlapDay > 0 && i === overlapDay + 1 && beforeOverlapRel === -1) {
+                    if (currRel > 0) {
+                        allCrosses.push({ date: data[i].date, type: isReversed ? 'gold-rev' : 'gold', val: overlapVal });
+                        processBuy(price, data[i].date, isLastDay, i);
+                    }
+                    overlapDay = -1;
+                } 
+                // 情況3：無重疊日期，直接交叉 → 立即交易
+                else if (prevRel === -1 && currRel > 0 && overlapDay === -1) {
+                    allCrosses.push({ date: data[i].date, type: isReversed ? 'gold-rev' : 'gold', val: +maS[i].toFixed(9) });
+                    processBuy(price, data[i].date, isLastDay, i);
+                }
+                
+                // 死亡交叉判斷邏輯
+                // 情況1：當天重疊 (短線穿過長線但相等) → 記錄重疊日期、MA值(9位小數)，等隔天確認
+                if (prevRel === 1 && currRel === 0) {
+                    overlapDay = i;
+                    beforeOverlapRel = 1;
+                    overlapVal = +maS[i].toFixed(9);
+                } 
+                // 情況2：隔一天確認 (i === overlapDay + 1)
+                //   - 如果有交叉 (currRel < 0)：交易，使用重叠時的MA值(9位小數)
+                //   - 如果無交叉：不交易，重置狀態
+                else if (overlapDay > 0 && i === overlapDay + 1 && beforeOverlapRel === 1) {
+                    if (currRel < 0) {
+                        allCrosses.push({ date: data[i].date, type: isReversed ? 'death-rev' : 'death', val: overlapVal });
+                        processSell(price, data[i].date);
+                    }
+                    overlapDay = -1;
+                } 
+                // 情況3：無重疊日期，直接交叉 → 立即交易
+                else if (prevRel === 1 && currRel < 0 && overlapDay === -1) {
+                    allCrosses.push({ date: data[i].date, type: isReversed ? 'death-rev' : 'death', val: +maS[i].toFixed(9) });
+                    processSell(price, data[i].date);
+                }
+            }
+            
+            if (hasPos && isLastDay) {
+                let sellVal = shares * price * (1 - COMMISSION);
+                tradeCount++;
+                const portfolioVal = cash + sellVal;
+                if (recordTrades) trades.push({ date: data[i].date, action: '賣出(平倉)', price, shares, profit: (cash + sellVal) - distCap, portfolio: portfolioVal });
+                cash += sellVal; shares = 0; hasPos = false;
+            }
+            updateMetrics(getPortfolioValue(price));
         }
         return { finalAsset: cash, maxDD: maxDD * 100, trades, allCrosses, tradeCount };
     }
@@ -951,14 +2319,24 @@
 
         btn.disabled = true; 
         document.getElementById('progWrapper').style.display = 'block';
-        g_allMA = {};
+        // 直接初始化當前模式的 MA 存儲（不經過 g_allMA，避免引用混亂）
+        g_allMA_byMode[g_currentMode] = {};
+        g_allMA = g_allMA_byMode[g_currentMode];
         
         // Use numeric MA implementations on the closes array to avoid object-field mismatches
         const closesForMA = g_backtestData.map(d => (d.close !== undefined ? d.close : (d.Close !== undefined ? d.Close : NaN)));
-        for (let p = 1; p <= MAX_PERIOD; p++){
-            if (g_currentMode === 'SMA') g_allMA[p] = SMA(closesForMA, p);
-            else if (g_currentMode === 'EMA') g_allMA[p] = EMA(closesForMA, p);
-            else /* WMA */ g_allMA[p] = WMA(closesForMA, p);
+        
+        // 價量分析模式使用SMA，其他模式根據選擇計算
+        if (g_currentMode === 'VP' || g_currentMode === 'VP2') {
+            for (let p = 1; p <= MAX_PERIOD; p++) {
+                g_allMA_byMode[g_currentMode][p] = SMA(closesForMA, p);
+            }
+        } else {
+            for (let p = 1; p <= MAX_PERIOD; p++){
+                if (g_currentMode === 'SMA') g_allMA_byMode[g_currentMode][p] = SMA(closesForMA, p);
+                else if (g_currentMode === 'EMA') g_allMA_byMode[g_currentMode][p] = EMA(closesForMA, p);
+                else /* WMA */ g_allMA_byMode[g_currentMode][p] = WMA(closesForMA, p);
+            }
         }
 
         // Debug: print WMA samples for quick verification
@@ -977,16 +2355,37 @@
 
         let results = [];
         g_allResults = [];
-        for (let s = 1; s <= MAX_PERIOD; s++) {
-            if (s % 16 === 0) {
-                document.getElementById('progFill').style.width = (s/MAX_PERIOD*100) + "%";
-                await new Promise(r => setTimeout(r, 0));
+        g_allResults_byMode[g_currentMode] = g_allResults;  // 綁定當前模式的 allResults
+        
+        if (g_currentMode === 'VP' || g_currentMode === 'VP2') {
+            // 價量分析模式：遍歷所有參數組合進行優化
+            const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
+                window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
+            
+            for (let s = 1; s <= MAX_PERIOD; s++) {
+                if (s % 16 === 0) {
+                    document.getElementById('progFill').style.width = (s/MAX_PERIOD*100) + "%";
+                    await new Promise(r => setTimeout(r, 0));
+                }
+                for (let l = 1; l <= MAX_PERIOD; l++) {
+                    let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode);
+                    let profit = res.finalAsset - g_initialCash;
+                    results.push({ s, l, ...res, profit });
+                    g_allResults.push({ s, l, finalAsset: res.finalAsset, profit });
+                }
             }
-            for (let l = 1; l <= MAX_PERIOD; l++) {
-                let res = backtest(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission);
-                let profit = res.finalAsset - g_initialCash;
-                results.push({ s, l, ...res, profit });
-                g_allResults.push({ s, l, finalAsset: res.finalAsset, profit });
+        } else {
+            for (let s = 1; s <= MAX_PERIOD; s++) {
+                if (s % 16 === 0) {
+                    document.getElementById('progFill').style.width = (s/MAX_PERIOD*100) + "%";
+                    await new Promise(r => setTimeout(r, 0));
+                }
+                for (let l = 1; l <= MAX_PERIOD; l++) {
+                    let res = backtest(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l);
+                    let profit = res.finalAsset - g_initialCash;
+                    results.push({ s, l, ...res, profit });
+                    g_allResults.push({ s, l, finalAsset: res.finalAsset, profit });
+                }
             }
         }
 
@@ -1000,7 +2399,16 @@
             return a.s - b.s;
         });
 
-        g_rankedResults = results; // 保存所有排序结果用于快速查询
+        // 保存當前模式的所有結果
+        g_allMA_byMode[g_currentMode] = g_allMA;
+        g_allResults_byMode[g_currentMode] = g_allResults;
+        g_rankedResults_byMode[g_currentMode] = results;  // 新增：保存排序後的結果（修復模式切換清空數據的問題）
+        g_unrankedResults_byMode[g_currentMode] = results.slice().sort((a, b) => {  // 新增：保存按參數順序的結果（用於支配關係對比）
+            if (a.s !== b.s) return a.s - b.s;
+            return a.l - b.l;
+        });
+        g_rankedResults = g_rankedResults_byMode[g_currentMode];  // 更新全局引用
+        
         updateRankTable(results.slice(0, 65536)); 
         showSpecificResult(results[0].s, results[0].l, 1, null, g_commission);
         render2DChart();
@@ -1027,20 +2435,38 @@
         const sVal = s, lVal = l;
         const data = g_backtestData;
         const mS = g_allMA[sVal], mL = g_allMA[lVal];
-        let result = backtest(data, mS, mL, g_initialCash, g_startIdx, commission, true);
-        const trades = result.trades, allCrosses = result.allCrosses;
+        
+        let result, chartCrosses;
+        if (g_currentMode === 'VP' || g_currentMode === 'VP2') {
+            const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
+                window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
+            result = backtest_VP(data, mS, mL, g_initialCash, g_startIdx, commission, true, sVal, lVal, volumeHeaderIndex, g_currentMode);
+            
+            // VP2 模式：同時運行純價格 MA 的 backtest，用於圖表顯示
+            if (g_currentMode === 'VP2') {
+                const chartResult = backtest(data, mS, mL, g_initialCash, g_startIdx, commission, false, sVal, lVal);
+                chartCrosses = chartResult.allCrosses;
+            } else {
+                chartCrosses = result.allCrosses;
+            }
+        } else {
+            result = backtest(data, mS, mL, g_initialCash, g_startIdx, commission, true, sVal, lVal);
+            chartCrosses = result.allCrosses;
+        }
+        const trades = result.trades, allCrosses = chartCrosses;
 
         // 為了讓圖表只顯示使用者指定的起始日之後的資料，建立 displayData
         const displayData = data.slice(g_startIdx);
         const displayMS = mS ? mS.slice(g_startIdx) : [];
         const displayML = mL ? mL.slice(g_startIdx) : [];
 
+        const modeLabel = g_currentMode === 'VP' ? ' (價量)' : (g_currentMode === 'VP2' ? ' (量價分析2)' : '');
         document.getElementById('bestResult').innerHTML = `
-            <h3>排名 #${rank} - 最優參數: <span style="color: #e74c3c;">${sVal}/${lVal}</span></h3>
+            <h3>排名 #${rank} - 最優參數: <span style="color: #e74c3c;">${sVal}/${lVal}${modeLabel}</span></h3>
             <p>最終資產: <strong style="color: #27ae60;">$${formatCurrency(result.finalAsset)}</strong></p>
             <p>獲利: <span style="color: #3498db;">$${formatCurrency(result.finalAsset - g_initialCash)}</span></p>
-            <p>收益率: <span>${((result.finalAsset / g_initialCash - 1) * 100).toFixed(10)}%</span></p>
-            <p>最大回撤: <span>${result.maxDD.toFixed(10)}%</span></p>
+            <p>收益率: <span>${((result.finalAsset / g_initialCash - 1) * 100).toFixed(2)}%</span></p>
+            <p>最大回撤: <span>${result.maxDD.toFixed(2)}%</span></p>
             <p>交易筆數: <strong>${trades.length}</strong></p>
         `;
 
@@ -1048,43 +2474,232 @@
             `<tr>
                 <td>${t.date}</td>
                 <td class="${t.action.includes('買') ? 'buy-text' : 'sell-text'}">${t.action}</td>
-                <td>$${t.price.toFixed(10)}</td>
+                <td>$${t.price.toFixed(9)}</td>
                 <td>${t.shares}</td>
-                <td class="${t.profit > 0 ? 'buy-text' : t.profit === 0 ? '' : 'sell-text'}">${t.profit ? `$${formatCurrency(t.profit)}` : '-'}</td>
+                <td>${t.portfolio ? `$${formatCurrency(t.portfolio)}` : '-'}</td>
             </tr>`).join('');
 
+        // 銷毀舊圖表實例
         if (chartInstance) chartInstance.destroy();
+        if (window.volumeChartInstance) window.volumeChartInstance.destroy();
+        document.getElementById('volumeChartContainer').style.display = 'none';
+        
         const ctx = document.getElementById("mainChart").getContext("2d");
-        const modeLabel = g_currentMode;
+        const volumeSelect = document.getElementById('volumeSelect').value;
+        
+        // 提取成交量資料（如果選擇了）
+        const volumeHeaderIndex = volumeSelect ? window.csvHeaders.indexOf(volumeSelect) : -1;
+        const dateHeaderIndex = window.csvHeaders.indexOf('Date');
+        console.log(`成交量欄位: ${volumeSelect}, csvHeaders:`, window.csvHeaders, `volumeHeaderIndex: ${volumeHeaderIndex}, dateHeaderIndex: ${dateHeaderIndex}`);
+        
+        let originalVolumeData = volumeHeaderIndex >= 0 ? 
+            displayData.map((d, displayIdx) => {
+                // 根據日期在 csvRaw 中找對應的行
+                let rowIdx = -1;
+                const targetDate = d.date;
+                
+                for (let i = 0; i < window.csvRaw.length; i++) {
+                    if (window.csvRaw[i][dateHeaderIndex] === targetDate) {
+                        rowIdx = i;
+                        break;
+                    }
+                }
+                
+                if (rowIdx >= 0 && rowIdx < window.csvRaw.length) {
+                    const vol = parseFloat(window.csvRaw[rowIdx][volumeHeaderIndex] || 0);
+                    if (displayIdx === 0) {
+                        console.log(`第一行數據 - 日期:${targetDate}, 找到rowIdx:${rowIdx}, csvRaw[${rowIdx}]:`, window.csvRaw[rowIdx], `成交量值: ${vol}`);
+                    }
+                    return vol;
+                }
+                return null;
+            }) : [];
+        
+        // 保留原始成交量數據用於顯示
+        let volumeData = originalVolumeData.slice();
+        
+        // 縮小成交量柱的高度 - 將其縮放到價格範圍的1%
+        let scaledVolumeMax = 0;
+        if (volumeData.length > 0) {
+            const priceValues = displayData.map(d => d.close).filter(p => p !== null && !isNaN(p));
+            const priceMax = Math.max(...priceValues);
+            const priceMin = Math.min(...priceValues);
+            const priceRange = priceMax - priceMin;
+            
+            const volumeMax = Math.max(...volumeData.filter(v => v !== null && !isNaN(v)));
+            const scaleFactor = (priceRange * 0.01) / volumeMax; // 成交量最高只占价格范围的1%
+            
+            volumeData = volumeData.map(v => v !== null && !isNaN(v) ? v * scaleFactor : null);
+            scaledVolumeMax = priceRange * 0.01;
+        }
+        
+        // 生成成交量顏色（根據價格漲跌判斷）
+        const volumeColors = displayData.map((d, idx) => {
+            if (idx === 0) return 'rgba(239, 68, 68, 0.6)'; // 第一天默認紅色
+            const prevClose = displayData[idx - 1].close;
+            const currClose = d.close;
+            return currClose >= prevClose ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)'; // 上漲紅色，下跌綠色
+        });
+        
+        // 構建圖表數據集
+        let datasets = [];
+        
+        // 然後添加其他價格相關的數據集（不再在價格圖中顯示成交量）
+        datasets.push(
+            { label: '實際買入', data: displayData.map(d => trades.find(t => t.date === d.date && t.action === '買入') ? d.close : null), borderColor: '#27ae60', backgroundColor: '#27ae60', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10, yAxisID: 'y' },
+            { label: '實際賣出/平倉', data: displayData.map(d => trades.find(t => t.date === d.date && (t.action === '賣出' || t.action === '賣出(平倉)')) ? d.close : null), borderColor: '#e74c3c', backgroundColor: '#e74c3c', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10, yAxisID: 'y' },
+            { label: '黃金交叉', data: displayData.map(d => {
+                const cross = allCrosses.find(c => c.date === d.date && (c.type === 'gold' || c.type === 'gold-rev'));
+                return cross ? cross.val : null;
+            }), borderColor: '#f1c40f', backgroundColor: '#f1c40f', pointStyle: 'circle', pointRadius: 6, showLine: false, z: 5, yAxisID: 'y' },
+            { label: '死亡交叉', data: displayData.map(d => {
+                const cross = allCrosses.find(c => c.date === d.date && (c.type === 'death' || c.type === 'death-rev'));
+                return cross ? cross.val : null;
+            }), borderColor: '#95a5a6', backgroundColor: '#95a5a6', pointStyle: 'circle', pointRadius: 6, showLine: false, z: 5, yAxisID: 'y' },
+            { label: '收盤價', data: displayData.map(d => d.close), borderColor: '#555', borderWidth: 2, pointRadius: 0, z: 1, yAxisID: 'y' },
+            { label: `${modeLabel} ${sVal}`, data: displayMS, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 0, z: 2, yAxisID: 'y' },
+            { label: `${modeLabel} ${lVal}`, data: displayML, borderColor: '#3498db', borderWidth: 2, pointRadius: 0, z: 2, yAxisID: 'y' }
+        );
+        
+        // 構建軸配置（只保留價格軸）
+        let scales = {
+            y: {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                title: { display: true, text: '股票價格' }
+            }
+        };
+        
         chartInstance = new Chart(ctx, {
             type: "line",
             data: {
                 labels: displayData.map(d => d.date),
-                datasets: [
-                    { label: '實際買入', data: displayData.map(d => trades.find(t => t.date === d.date && t.action === '買入') ? d.close : null), borderColor: '#27ae60', backgroundColor: '#27ae60', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10 },
-                    { label: '實際賣出/平倉', data: displayData.map(d => trades.find(t => t.date === d.date && (t.action === '賣出' || t.action === '賣出(平倉)')) ? d.close : null), borderColor: '#e74c3c', backgroundColor: '#e74c3c', pointStyle: 'rectRot', pointRadius: 10, showLine: false, z: 10 },
-                    { label: '黃金交叉', data: displayData.map(d => {
-                        const cross = allCrosses.find(c => c.date === d.date && c.type === 'gold');
-                        return cross ? cross.val : null;
-                    }), borderColor: '#f1c40f', pointStyle: 'circle', pointRadius: 5, showLine: false, z: 5 },
-                    { label: '死亡交叉', data: displayData.map(d => {
-                        const cross = allCrosses.find(c => c.date === d.date && c.type === 'death');
-                        return cross ? cross.val : null;
-                    }), borderColor: '#95a5a6', pointStyle: 'circle', pointRadius: 5, showLine: false, z: 5 },
-                    { label: '收盤價', data: displayData.map(d => d.close), borderColor: '#ddd', borderWidth: 1, pointRadius: 0, z: 1 },
-                    { label: `${modeLabel} ${sVal}`, data: displayMS, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 0, z: 2 },
-                    { label: `${modeLabel} ${lVal}`, data: displayML, borderColor: '#3498db', borderWidth: 2, pointRadius: 0, z: 2 }
-                ]
+                datasets: datasets
             },
             options: { 
                 responsive: true, 
                 maintainAspectRatio: false,
+                scales: scales,
                 plugins: {
-                    legend: { labels: { usePointStyle: true } }
+                    legend: { labels: { usePointStyle: true } },
+                    filler: true
+                },
+                layout: {
+                    padding: 20
                 }
             }
         });
-    }
+        
+        // 為價格圖添加滑鼠事件以聯動成交量圖
+        document.getElementById('mainChart').addEventListener('mousemove', function(e) {
+            if (window.volumeChartInstance) {
+                const priceCanvasPos = Chart.helpers.getRelativePosition(e, chartInstance);
+                const priceDataX = chartInstance.scales.x.getValueForPixel(priceCanvasPos.x);
+                const priceIndex = Math.round(priceDataX);
+                
+                if (priceIndex >= 0 && priceIndex < window.volumeChartInstance.data.labels.length) {
+                    window.volumeChartInstance.tooltip.setActiveElements(
+                        [{ datasetIndex: 0, index: priceIndex }],
+                        { x: priceCanvasPos.x * (window.volumeChartInstance.canvas.width / chartInstance.canvas.width), y: priceCanvasPos.y }
+                    );
+                    window.volumeChartInstance.update('none');
+                }
+            }
+        });
+        
+        document.getElementById('mainChart').addEventListener('mouseleave', function() {
+            if (window.volumeChartInstance) {
+                window.volumeChartInstance.tooltip.setActiveElements([], {});
+                window.volumeChartInstance.update('none');
+            }
+        });
+        
+        // 獨立的成交量圖表
+        if (volumeSelect && originalVolumeData.length > 0) {
+            document.getElementById('volumeChartContainer').style.display = 'block';
+            const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+            
+            if (window.volumeChartInstance) window.volumeChartInstance.destroy();
+            
+            window.volumeChartInstance = new Chart(volumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: displayData.map(d => d.date),
+                    datasets: [{
+                        label: volumeSelect,
+                        data: originalVolumeData,
+                        backgroundColor: volumeColors,
+                        borderColor: 'transparent'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'x',
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += context.parsed.y.toFixed(0);
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    layout: {
+                        padding: 20
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('zh-TW');
+                                }
+                            },
+                            title: { 
+                                display: true, 
+                                text: '成交量'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 為成交量圖添加滑鼠事件以聯動價格圖
+            document.getElementById('volumeChart').addEventListener('mousemove', function(e) {
+                if (chartInstance) {
+                    const volumeCanvasPos = Chart.helpers.getRelativePosition(e, window.volumeChartInstance);
+                    const volumeDataX = window.volumeChartInstance.scales.x.getValueForPixel(volumeCanvasPos.x);
+                    const volumeIndex = Math.round(volumeDataX);
+                    
+                    if (volumeIndex >= 0 && volumeIndex < chartInstance.data.labels.length) {
+                        chartInstance.tooltip.setActiveElements(
+                            Array.from({length: chartInstance.data.datasets.length}, (_, i) => ({ datasetIndex: i, index: volumeIndex })),
+                            { x: volumeCanvasPos.x * (chartInstance.canvas.width / window.volumeChartInstance.canvas.width), y: volumeCanvasPos.y }
+                        );
+                        chartInstance.update('none');
+                    }
+                }
+            });
+            
+            document.getElementById('volumeChart').addEventListener('mouseleave', function() {
+                if (chartInstance) {
+                    chartInstance.tooltip.setActiveElements([], {});
+                    chartInstance.update('none');
+                }
+            });
+        } else {
+            document.getElementById('volumeChartContainer').style.display = 'none';
+        }
+        };
+    
 
     // 新增：2D 熱力圖
     function render2DChart() {
@@ -1185,6 +2800,12 @@
         const input = document.getElementById('queryInput').value.trim();
         const resultDiv = document.getElementById('queryResult');
         
+        // 檢查是否已執行優化
+        if (!g_rankedResults || g_rankedResults.length === 0) {
+            resultDiv.innerHTML = '<span style="color: #f59e0b;">⚠ 請先執行優化後再查詢</span>';
+            return;
+        }
+        
         if (!input) {
             resultDiv.innerHTML = '<span style="color: #e74c3c;">請輸入組合 (例: 5/20)</span>';
             return;
@@ -1215,11 +2836,13 @@
         // 找出排名
         const rank = g_rankedResults.indexOf(found) + 1;
         
+        // 獲取模式標籤
+        const modeNames = { 'SMA': 'SMA 簡單均線', 'WMA': 'WMA 加權均線', 'EMA': 'EMA 指數均線', 'VP': '價量分析', 'VP2': '量價分析2' };
+        const modeLabel = modeNames[g_currentMode] || g_currentMode;
+        
         // 顯示結果並展示該組合的詳細信息
         resultDiv.innerHTML = `
-            <span style="color: #27ae60;">✓ 排名第 <strong>${rank}</strong> 名 | 
-            最終資產: <strong>$${formatCurrency(found.finalAsset)}</strong> | 
-            獲利: <strong style="color: #3498db;">$${formatCurrency(found.profit)}</strong></span>
+            <span style="color: #27ae60;">✓ [${modeLabel}] 排名第 <strong>${rank}</strong> 名<br>最終資產: <strong>$${formatCurrency(found.finalAsset)}</strong> | 獲利: <strong style="color: #3498db;">$${formatCurrency(found.profit)}</strong></span>
         `;
         
         // 自動顯示該組合的詳細交易信息
@@ -1259,18 +2882,33 @@
         const input = document.getElementById('batchQueryInput').value.trim();
         const resultDiv = document.getElementById('batchQueryResult');
         
+        // 檢查是否已執行優化
+        if (!g_rankedResults || g_rankedResults.length === 0) {
+            resultDiv.innerHTML = '<div class="batch-result-item batch-error">❌ 請先執行優化後再查詢</div>';
+            return;
+        }
+        
         if (!input) {
             resultDiv.innerHTML = '<div class="batch-result-item batch-error">❌ 請輸入組合</div>';
             return;
         }
         
+        // 獲取模式標籤
+        const modeNames = { 'SMA': 'SMA', 'WMA': 'WMA', 'EMA': 'EMA', 'VP': '價量', 'VP2': '量價2' };
+        const modeLabel = modeNames[g_currentMode] || g_currentMode;
+        
         const lines = input.split('\n').map(line => line.trim()).filter(line => line);
-        let results = [];
+        let results = []; 
+        let successCount = 0, errorCount = 0;
+        
+        // 添加模式信息標頭
+        results.push(`<div class="batch-result-item" style="color: #0ea5e9; font-weight: 600; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 8px;">📊 [${modeLabel}] 模式查詢結果</div>`);
         
         for (let line of lines) {
             const parts = line.split('/');
             if (parts.length !== 2) {
                 results.push(`<div class="batch-result-item batch-error">❌ ${line} - 格式錯誤</div>`);
+                errorCount++;
                 continue;
             }
             
@@ -1279,6 +2917,7 @@
             
             if (isNaN(s) || isNaN(l) || s <= 0 || l <= 0) {
                 results.push(`<div class="batch-result-item batch-error">❌ ${line} - 無效數值</div>`);
+                errorCount++;
                 continue;
             }
             
@@ -1286,17 +2925,235 @@
             
             if (!found) {
                 results.push(`<div class="batch-result-item batch-error">❌ ${line} - 找不到組合</div>`);
+                errorCount++;
                 continue;
             }
             
             const rank = g_rankedResults.indexOf(found) + 1;
             const returnRate = ((found.finalAsset / g_initialCash - 1) * 100).toFixed(2);
-            results.push(`<div class="batch-result-item batch-success">✓ ${s}/${l} - 排名 #${rank} | $${formatCurrency(found.finalAsset)}</div>`);
+            results.push(`<div class="batch-result-item batch-success">✓ ${s}/${l} - #${rank} 名 | $${formatCurrency(found.finalAsset)} | ${returnRate}%</div>`);
+            successCount++;
         }
+        
+        // 添加統計信息
+        results.push(`<div class="batch-result-item" style="color: #64748b; font-size: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0;">查詢完成：成功 ${successCount} 個，失敗 ${errorCount} 個</div>`);
         
         resultDiv.innerHTML = results.join('');
     }
+
+    // 支配關係比較功能
+    function compareDominance() {
+        const modeA = document.getElementById('modeA').value;
+        const modeB = document.getElementById('modeB').value;
+
+        if (modeA === modeB) {
+            alert('請選擇不同的模式進行比較');
+            return;
+        }
+
+        // 優先使用按參數順序的結果（用於對比），如果沒有則降級到排序後的結果
+        const resultsA = g_unrankedResults_byMode[modeA] && g_unrankedResults_byMode[modeA].length > 0 
+            ? g_unrankedResults_byMode[modeA] 
+            : g_rankedResults_byMode[modeA];
+        const resultsB = g_unrankedResults_byMode[modeB] && g_unrankedResults_byMode[modeB].length > 0
+            ? g_unrankedResults_byMode[modeB] 
+            : g_rankedResults_byMode[modeB];
+
+        if (!resultsA || resultsA.length === 0 || !resultsB || resultsB.length === 0) {
+            alert(`請先執行 ${modeA} 和 ${modeB} 的優化`);
+            return;
+        }
+
+        // 檢查參數是否對齐
+        if (resultsA.length !== resultsB.length) {
+            alert(`${modeA}(${resultsA.length}組) 和 ${modeB}(${resultsB.length}組) 的結果數量不同，無法直接對比`);
+            return;
+        }
+
+        // 驗證參數對齐
+        let parameterAligned = true;
+        for (let i = 0; i < resultsA.length; ++i) {
+            if (resultsA[i].s !== resultsB[i].s || resultsA[i].l !== resultsB[i].l) {
+                parameterAligned = false;
+                console.warn(`參數不一致 index=${i} A(${resultsA[i].s},${resultsA[i].l}) B(${resultsB[i].s},${resultsB[i].l})`);
+                break;
+            }
+        }
+
+        if (!parameterAligned) {
+            alert('模式間的參數組合順序不一致，無法進行對比');
+            return;
+        }
+
+        // 進行支配關係分析
+        const comparisonResults = [];
+        let countA = 0, countB = 0, countNone = 0;
+
+        const modeNames = { 'SMA': 'SMA', 'WMA': 'WMA', 'EMA': 'EMA', 'VP': '價量', 'VP2': '量價2' };
+        const modeALabel = modeNames[modeA] || modeA;
+        const modeBLabel = modeNames[modeB] || modeB;
+
+        for (let i = 0; i < resultsA.length; ++i) {
+            const resultA = resultsA[i];
+            const resultB = resultsB[i];
+
+            // 計算勝率 = 獲利為正的交易次數 / 總交易次數 × 100%
+            const tradeCountA = resultA.tradeCount || 0;
+            const tradeCountB = resultB.tradeCount || 0;
+            
+            // 計算獲利為正的交易次數
+            let winCountA = 0, winCountB = 0;
+            if (resultA.trades && Array.isArray(resultA.trades)) {
+                winCountA = resultA.trades.filter(t => t.profit > 0).length;
+            }
+            if (resultB.trades && Array.isArray(resultB.trades)) {
+                winCountB = resultB.trades.filter(t => t.profit > 0).length;
+            }
+            
+            // 計算勝率百分比
+            const winRateA = tradeCountA > 0 ? (winCountA / tradeCountA) * 100 : 0;
+            const winRateB = tradeCountB > 0 ? (winCountB / tradeCountB) * 100 : 0;
+            
+            // 計算總獲利
+            const totalProfitA = resultA.finalAsset - g_initialCash;
+            const totalProfitB = resultB.finalAsset - g_initialCash;
+
+            let dominance = 'None';
+            
+            // 如果任一組的交易次數為 0，則視為互不支配
+            if (tradeCountA === 0 || tradeCountB === 0) {
+                dominance = 'None';
+                countNone++;
+            } else {
+                // 支配關係判斷：基於勝率和總獲利
+                // A支配B：A的勝率 >= B的勝率 且 A的總獲利 >= B的總獲利，且至少有一個嚴格大於
+                if (winRateA >= winRateB && totalProfitA >= totalProfitB) {
+                    if (winRateA > winRateB || totalProfitA > totalProfitB) {
+                        dominance = 'A';
+                        countA++;
+                    } else {
+                        dominance = 'None';
+                        countNone++;
+                    }
+                }
+                // B支配A
+                else if (winRateB >= winRateA && totalProfitB >= totalProfitA) {
+                    if (winRateB > winRateA || totalProfitB > totalProfitA) {
+                        dominance = 'B';
+                        countB++;
+                    } else {
+                        dominance = 'None';
+                        countNone++;
+                    }
+                }
+                else {
+                    dominance = 'None';
+                    countNone++;
+                }
+            }
+
+            comparisonResults.push({
+                s: resultA.s,
+                l: resultA.l,
+                winRateA: winRateA,
+                totalProfitA: totalProfitA,
+                winRateB: winRateB,
+                totalProfitB: totalProfitB,
+                dominance: dominance
+            });
+        }
+
+        // 顯示統計信息
+        const statsHtml = `
+            <div class="stat-card">
+                <div class="label">${modeALabel} 支配</div>
+                <div class="value">${countA} / ${resultsA.length}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${modeBLabel} 支配</div>
+                <div class="value">${countB} / ${resultsA.length}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">互不支配</div>
+                <div class="value">${countNone} / ${resultsA.length}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">支配率差</div>
+                <div class="value">${(((countA - countB) / resultsA.length) * 100).toFixed(1)}%</div>
+            </div>
+        `;
+        document.getElementById('dominanceStats').innerHTML = statsHtml;
+
+        // 顯示對比表格
+        const tableHtml = comparisonResults.map(r => `
+            <tr>
+                <td>${r.s}</td>
+                <td>${r.l}</td>
+                <td>${r.winRateA.toFixed(2)}%</td>
+                <td>$${formatCurrency(r.totalProfitA)}</td>
+                <td>${r.winRateB.toFixed(2)}%</td>
+                <td>$${formatCurrency(r.totalProfitB)}</td>
+                <td class="dominance-${r.dominance}">${r.dominance === 'A' ? `✓ ${modeALabel}` : (r.dominance === 'B' ? `✓ ${modeBLabel}` : '互不支配')}</td>
+            </tr>
+        `).join('');
+
+        document.querySelector('#dominanceTable tbody').innerHTML = tableHtml;
+
+        // 保存對比結果用於導出
+        window.currentDominanceResults = {
+            modeA, modeB, modeALabel, modeBLabel,
+            results: comparisonResults,
+            stats: { countA, countB, countNone }
+        };
+
+        // 隱藏空狀態提示，顯示結果容器
+        const emptyState = document.getElementById('dominanceEmptyState');
+        if (emptyState) emptyState.style.display = 'none';
+        
+        document.getElementById('dominanceResultContainer').style.display = 'block';
+        document.getElementById('dominanceSection').classList.add('visible');
+
+        // 滾動到結果區域
+        document.getElementById('dominanceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // 下載對比結果為 CSV
+    function downloadDominanceCSV() {
+        if (!window.currentDominanceResults) {
+            alert('請先執行對比');
+            return;
+        }
+
+        const { modeA, modeB, modeALabel, modeBLabel, results, stats } = window.currentDominanceResults;
+        
+        let csv = `模式A,模式B,短期,長期,勝率(${modeALabel}),獲利(${modeALabel}),勝率(${modeBLabel}),獲利(${modeBLabel}),支配關係\n`;
+        
+        results.forEach(r => {
+            const dominanceText = r.dominance === 'A' ? modeALabel : (r.dominance === 'B' ? modeBLabel : '互不支配');
+            csv += `${modeA},${modeB},${r.s},${r.l},${r.winRateA.toFixed(2)}%,${r.totalProfitA},${r.winRateB.toFixed(2)}%,${r.totalProfitB},${dominanceText}\n`;
+        });
+
+        // 添加統計摘要
+        csv += `\n統計摘要,,,,,,,\n`;
+        csv += `${modeALabel} 支配數,${stats.countA},,,,,,\n`;
+        csv += `${modeBLabel} 支配數,${stats.countB},,,,,,\n`;
+        csv += `互不支配,${stats.countNone},,,,,,\n`;
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `dominance_${modeA}_vs_${modeB}_${new Date().getTime()}.csv`;
+        link.click();
+    }
+
+    // 切換詳細檢視
+    // 綜合回測函式
 </script>
 
+<!-- 綜合回測系統外部 JavaScript 模塊 -->
+<script src="js/comprehensive-backtest.js"></script>
+
 </body>
+</html>
+
 </html>
