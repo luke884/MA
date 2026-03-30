@@ -1576,9 +1576,9 @@
                             <tr>
                                 <th>短期</th>
                                 <th>長期</th>
-                                <th>勝率(A)</th>
+                                <th>最大回撤(A)</th>
+                                <th>最大回撤(B)</th>
                                 <th>獲利(A)</th>
-                                <th>勝率(B)</th>
                                 <th>獲利(B)</th>
                                 <th>支配關係</th>
                             </tr>
@@ -1998,7 +1998,7 @@
                 });
             })() : null;
         
-        const volumeMA = volumeData ? SMA(volumeData, Math.max(lPeriod, 1)) : null; // 成交量的移動平均，用於 VP2 模式
+        const volumeMA = volumeData ? SMA(volumeData, Math.max(sPeriod, 1)) : null; // 成交量的移動平均，用於 VP2 模式
         
         // 找到第一个有效数据的索引
         let validStartIdx = startIdx;
@@ -2466,7 +2466,7 @@
             <p>最終資產: <strong style="color: #27ae60;">$${formatCurrency(result.finalAsset)}</strong></p>
             <p>獲利: <span style="color: #3498db;">$${formatCurrency(result.finalAsset - g_initialCash)}</span></p>
             <p>收益率: <span>${((result.finalAsset / g_initialCash - 1) * 100).toFixed(2)}%</span></p>
-            <p>最大回撤: <span>${result.maxDD.toFixed(2)}%</span></p>
+            <p>最大回撤: <span>-${result.maxDD.toFixed(2)}%</span></p>
             <p>交易筆數: <strong>${trades.length}</strong></p>
         `;
 
@@ -2985,8 +2985,10 @@
             return;
         }
 
-        // 進行支配關係分析
+        // 進行最大回撤與獲利分析
         const comparisonResults = [];
+        let totalMaxDDA = 0, totalMaxDDB = 0;
+        let totalProfitA_sum = 0, totalProfitB_sum = 0;
         let countA = 0, countB = 0, countNone = 0;
 
         const modeNames = { 'SMA': 'SMA', 'WMA': 'WMA', 'EMA': 'EMA', 'VP': '價量', 'VP2': '量價2' };
@@ -2997,54 +2999,46 @@
             const resultA = resultsA[i];
             const resultB = resultsB[i];
 
-            // 計算勝率 = 獲利為正的交易次數 / 總交易次數 × 100%
-            const tradeCountA = resultA.tradeCount || 0;
-            const tradeCountB = resultB.tradeCount || 0;
-            
-            // 計算獲利為正的交易次數
-            let winCountA = 0, winCountB = 0;
-            if (resultA.trades && Array.isArray(resultA.trades)) {
-                winCountA = resultA.trades.filter(t => t.profit > 0).length;
-            }
-            if (resultB.trades && Array.isArray(resultB.trades)) {
-                winCountB = resultB.trades.filter(t => t.profit > 0).length;
-            }
-            
-            // 計算勝率百分比
-            const winRateA = tradeCountA > 0 ? (winCountA / tradeCountA) * 100 : 0;
-            const winRateB = tradeCountB > 0 ? (winCountB / tradeCountB) * 100 : 0;
+            // 獲取最大回撤
+            const maxDDA = resultA.maxDD || 0;
+            const maxDDB = resultB.maxDD || 0;
             
             // 計算總獲利
             const totalProfitA = resultA.finalAsset - g_initialCash;
             const totalProfitB = resultB.finalAsset - g_initialCash;
 
+            // 累積用於計算平均值
+            totalMaxDDA += maxDDA;
+            totalMaxDDB += maxDDB;
+            totalProfitA_sum += totalProfitA;
+            totalProfitB_sum += totalProfitB;
+
+            // 判斷支配關係：基於最大回撤(愈小愈好) 和 總獲利(愈大愈好)
+            // A 支配 B: A.maxDD <= B.maxDD && A.profit >= B.profit，且至少一邊嚴格更好
+            // B 支配 A: B.maxDD <= A.maxDD && B.profit >= A.profit，且至少一邊嚴格更好
             let dominance = 'None';
-            
-            // 如果任一組的交易次數為 0，則視為互不支配
+
+            // 檢查兩個模式是否都有交易
+            const tradeCountA = resultA.tradeCount || 0;
+            const tradeCountB = resultB.tradeCount || 0;
+
+            // 如果任一方沒有交易，不進行支配判斷
             if (tradeCountA === 0 || tradeCountB === 0) {
                 dominance = 'None';
                 countNone++;
             } else {
-                // 支配關係判斷：基於勝率和總獲利
-                // A支配B：A的勝率 >= B的勝率 且 A的總獲利 >= B的總獲利，且至少有一個嚴格大於
-                if (winRateA >= winRateB && totalProfitA >= totalProfitB) {
-                    if (winRateA > winRateB || totalProfitA > totalProfitB) {
-                        dominance = 'A';
-                        countA++;
-                    } else {
-                        dominance = 'None';
-                        countNone++;
-                    }
-                }
-                // B支配A
-                else if (winRateB >= winRateA && totalProfitB >= totalProfitA) {
-                    if (winRateB > winRateA || totalProfitB > totalProfitA) {
-                        dominance = 'B';
-                        countB++;
-                    } else {
-                        dominance = 'None';
-                        countNone++;
-                    }
+                const aIsBetterOrEqual = (maxDDA <= maxDDB && totalProfitA >= totalProfitB);
+                const bIsBetterOrEqual = (maxDDB <= maxDDA && totalProfitB >= totalProfitA);
+                const aIsStrictlyBetter = (maxDDA < maxDDB || totalProfitA > totalProfitB);
+                const bIsStrictlyBetter = (maxDDB < maxDDA || totalProfitB > totalProfitA);
+
+                if (aIsBetterOrEqual && aIsStrictlyBetter) {
+                    dominance = 'A';
+                    countA++;
+                } 
+                else if (bIsBetterOrEqual && bIsStrictlyBetter) {
+                    dominance = 'B';
+                    countB++;
                 }
                 else {
                     dominance = 'None';
@@ -3055,31 +3049,56 @@
             comparisonResults.push({
                 s: resultA.s,
                 l: resultA.l,
-                winRateA: winRateA,
+                maxDDA: maxDDA,
+                maxDDB: maxDDB,
                 totalProfitA: totalProfitA,
-                winRateB: winRateB,
                 totalProfitB: totalProfitB,
                 dominance: dominance
             });
         }
 
+        // 計算平均值
+        const avgMaxDDA = resultsA.length > 0 ? totalMaxDDA / resultsA.length : 0;
+        const avgMaxDDB = resultsA.length > 0 ? totalMaxDDB / resultsA.length : 0;
+        const avgProfitA = resultsA.length > 0 ? totalProfitA_sum / resultsA.length : 0;
+        const avgProfitB = resultsA.length > 0 ? totalProfitB_sum / resultsA.length : 0;
+
         // 顯示統計信息
+        const percentA = resultsA.length > 0 ? ((countA / resultsA.length) * 100).toFixed(1) : 0;
+        const percentB = resultsA.length > 0 ? ((countB / resultsA.length) * 100).toFixed(1) : 0;
+        const percentNone = resultsA.length > 0 ? ((countNone / resultsA.length) * 100).toFixed(1) : 0;
+
         const statsHtml = `
             <div class="stat-card">
                 <div class="label">${modeALabel} 支配</div>
                 <div class="value">${countA} / ${resultsA.length}</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${percentA}%</div>
             </div>
             <div class="stat-card">
                 <div class="label">${modeBLabel} 支配</div>
                 <div class="value">${countB} / ${resultsA.length}</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${percentB}%</div>
             </div>
             <div class="stat-card">
                 <div class="label">互不支配</div>
                 <div class="value">${countNone} / ${resultsA.length}</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${percentNone}%</div>
             </div>
             <div class="stat-card">
-                <div class="label">支配率差</div>
-                <div class="value">${(((countA - countB) / resultsA.length) * 100).toFixed(1)}%</div>
+                <div class="label">${modeALabel} 平均回撤</div>
+                <div class="value">-${avgMaxDDA.toFixed(2)}%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${modeBLabel} 平均回撤</div>
+                <div class="value">-${avgMaxDDB.toFixed(2)}%</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${modeALabel} 平均獲利</div>
+                <div class="value">$${formatCurrency(avgProfitA)}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${modeBLabel} 平均獲利</div>
+                <div class="value">$${formatCurrency(avgProfitB)}</div>
             </div>
         `;
         document.getElementById('dominanceStats').innerHTML = statsHtml;
@@ -3089,9 +3108,9 @@
             <tr>
                 <td>${r.s}</td>
                 <td>${r.l}</td>
-                <td>${r.winRateA.toFixed(2)}%</td>
+                <td>-${r.maxDDA.toFixed(2)}%</td>
+                <td>-${r.maxDDB.toFixed(2)}%</td>
                 <td>$${formatCurrency(r.totalProfitA)}</td>
-                <td>${r.winRateB.toFixed(2)}%</td>
                 <td>$${formatCurrency(r.totalProfitB)}</td>
                 <td class="dominance-${r.dominance}">${r.dominance === 'A' ? `✓ ${modeALabel}` : (r.dominance === 'B' ? `✓ ${modeBLabel}` : '互不支配')}</td>
             </tr>
@@ -3103,7 +3122,10 @@
         window.currentDominanceResults = {
             modeA, modeB, modeALabel, modeBLabel,
             results: comparisonResults,
-            stats: { countA, countB, countNone }
+            stats: { 
+                countA, countB, countNone,
+                avgMaxDDA, avgMaxDDB, avgProfitA, avgProfitB
+            }
         };
 
         // 隱藏空狀態提示，顯示結果容器
@@ -3126,23 +3148,27 @@
 
         const { modeA, modeB, modeALabel, modeBLabel, results, stats } = window.currentDominanceResults;
         
-        let csv = `模式A,模式B,短期,長期,勝率(${modeALabel}),獲利(${modeALabel}),勝率(${modeBLabel}),獲利(${modeBLabel}),支配關係\n`;
+        let csv = `模式A,模式B,短期,長期,最大回撤(${modeALabel}),獲利(${modeALabel}),最大回撤(${modeBLabel}),獲利(${modeBLabel}),支配關係\n`;
         
         results.forEach(r => {
             const dominanceText = r.dominance === 'A' ? modeALabel : (r.dominance === 'B' ? modeBLabel : '互不支配');
-            csv += `${modeA},${modeB},${r.s},${r.l},${r.winRateA.toFixed(2)}%,${r.totalProfitA},${r.winRateB.toFixed(2)}%,${r.totalProfitB},${dominanceText}\n`;
+            csv += `${modeA},${modeB},${r.s},${r.l},-${r.maxDDA.toFixed(2)}%,${r.totalProfitA.toFixed(2)},-${r.maxDDB.toFixed(2)}%,${r.totalProfitB.toFixed(2)},${dominanceText}\n`;
         });
 
         // 添加統計摘要
-        csv += `\n統計摘要,,,,,,,\n`;
-        csv += `${modeALabel} 支配數,${stats.countA},,,,,,\n`;
-        csv += `${modeBLabel} 支配數,${stats.countB},,,,,,\n`;
-        csv += `互不支配,${stats.countNone},,,,,,\n`;
+        csv += `\n統計摘要\n`;
+        csv += `${modeALabel} 支配數,${stats.countA}\n`;
+        csv += `${modeBLabel} 支配數,${stats.countB}\n`;
+        csv += `互不支配,${stats.countNone}\n`;
+        csv += `${modeALabel} 平均回撤,-${stats.avgMaxDDA.toFixed(2)}%\n`;
+        csv += `${modeBLabel} 平均回撤,-${stats.avgMaxDDB.toFixed(2)}%\n`;
+        csv += `${modeALabel} 平均獲利,$${stats.avgProfitA.toFixed(2)}\n`;
+        csv += `${modeBLabel} 平均獲利,$${stats.avgProfitB.toFixed(2)}\n`;
 
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `dominance_${modeA}_vs_${modeB}_${new Date().getTime()}.csv`;
+        link.download = `comparison_${modeA}_vs_${modeB}_${new Date().getTime()}.csv`;
         link.click();
     }
 

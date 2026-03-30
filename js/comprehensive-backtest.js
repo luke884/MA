@@ -432,7 +432,7 @@ function runComprehensiveBacktest() {
         if (totalReturnEl) totalReturnEl.textContent = bestResult.returnRate.toFixed(2) + '%';
         if (finalEquityEl) finalEquityEl.textContent = '$' + formatCurrency(bestResult.finalAsset);
         if (tradeCountEl) tradeCountEl.textContent = bestResult.tradeCount;
-        if (maxDrawdownEl) maxDrawdownEl.textContent = bestResult.maxDD.toFixed(2) + '%';
+        if (maxDrawdownEl) maxDrawdownEl.textContent = '-' + bestResult.maxDD.toFixed(2) + '%';
         if (winRateEl) winRateEl.textContent = bestResult.winRate.toFixed(2) + '%';
         if (sharpeRatioEl) sharpeRatioEl.textContent = bestResult.sharpeRatio.toFixed(2);
         
@@ -1079,14 +1079,18 @@ function executeRealBacktest(closes, dates, signals, params, startIdx = 1, short
     const avgLoss = lossTrades.length > 0 ? 
         lossTrades.reduce((sum, t) => sum + t.profit, 0) / lossTrades.length : 0;
     
-    // 最大回撤計算
+    // 最大回撤計算（只對 validStartIdx 之後的數據計算，與 C++ 版本一致）
     let maxEquity = params.initial_capital;
     let maxDD = 0;
-    for (let eq of equityHistory) {
+    const validEquityOffset = validStartIdx - startIdx;  // equityHistory 中有效數據的起始索引
+    
+    for (let i = validEquityOffset; i < equityHistory.length; i++) {
+        const eq = equityHistory[i];
         if (eq > maxEquity) maxEquity = eq;
-        const dd = ((maxEquity - eq) / maxEquity) * 100;
+        const dd = (maxEquity - eq) / maxEquity;  // 保留小數精度
         if (dd > maxDD) maxDD = dd;
     }
+    maxDD = maxDD * 100;  // 最後乘 100 轉成百分比
     
     // 夏普比率計算（簡化版）
     const returns = [];
