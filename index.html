@@ -1590,6 +1590,7 @@
                     <button onclick="downloadDominanceCSV()">📥 下載比較結果 CSV</button>
                     <button onclick="toggleDetailedView()">📊 詳細檢視</button>
                 </div>
+                <div id="dominanceScatterChart" style="width: 100%; height: 600px; margin: 20px 0; background: #fafafa; border-radius: 8px;"></div>
             </div>
         </div>
     </div>
@@ -3128,6 +3129,9 @@
             }
         };
 
+        // 繪製支配關係散點圖
+        drawDominanceScatterChart(comparisonResults, resultsA, resultsB, modeALabel, modeBLabel);
+
         // 隱藏空狀態提示，顯示結果容器
         const emptyState = document.getElementById('dominanceEmptyState');
         if (emptyState) emptyState.style.display = 'none';
@@ -3139,6 +3143,244 @@
         document.getElementById('dominanceSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // 計算帕累托前緣（保留完整的結果信息）
+    function calculateParetoFrontier(results) {
+        if (results.length === 0) return [];
+        
+        // 轉換為 {maxDD, profit, params} 格式
+        const points = results.map(r => ({
+            maxDD: r.maxDD || 0,
+            profit: (r.finalAsset - g_initialCash) || 0,
+            s: r.s,  // 短線週期
+            l: r.l,  // 長線週期
+            fullResult: r
+        }));
+
+        // 按回撤從小到大排序
+        const sorted = points.slice().sort((a, b) => a.maxDD - b.maxDD);
+
+        // 找出帕累托前緣：利潤逐漸遞增的點
+        const frontier = [];
+        let maxProfit = -Infinity;
+
+        for (const point of sorted) {
+            if (point.profit > maxProfit) {
+                frontier.push(point);
+                maxProfit = point.profit;
+            }
+        }
+
+        return frontier;
+    }
+
+    // 繪製支配關係散點圖
+    function drawDominanceScatterChart(comparisonResults, resultsA, resultsB, modeALabel, modeBLabel) {
+        // 準備 Mode A 的數據
+        const dataA = resultsA.map(r => ({
+            x: r.maxDD || 0,
+            y: (r.finalAsset - g_initialCash) || 0,
+            text: `${modeALabel}: DD=${(r.maxDD || 0).toFixed(2)}%, Profit=$${((r.finalAsset - g_initialCash) || 0).toFixed(2)}`
+        }));
+
+        // 準備 Mode B 的數據
+        const dataB = resultsB.map(r => ({
+            x: r.maxDD || 0,
+            y: (r.finalAsset - g_initialCash) || 0,
+            text: `${modeBLabel}: DD=${(r.maxDD || 0).toFixed(2)}%, Profit=$${((r.finalAsset - g_initialCash) || 0).toFixed(2)}`
+        }));
+
+        // 計算帕累托前緣
+        const frontierA = calculateParetoFrontier(resultsA);
+        const frontierB = calculateParetoFrontier(resultsB);
+
+        const trace1 = {
+            x: dataA.map(d => d.x),
+            y: dataA.map(d => d.y),
+            mode: 'markers',
+            type: 'scattergl',
+            name: modeALabel,
+            marker: {
+                size: 5,
+                color: '#3b82f6',
+                opacity: 0.6,
+                line: { color: '#1e40af', width: 0.5 }
+            },
+            text: dataA.map(d => d.text),
+            hoverinfo: 'text'
+        };
+
+        const trace2 = {
+            x: dataB.map(d => d.x),
+            y: dataB.map(d => d.y),
+            mode: 'markers',
+            type: 'scattergl',
+            name: modeBLabel,
+            marker: {
+                size: 5,
+                color: '#ef4444',
+                opacity: 0.6,
+                line: { color: '#991b1b', width: 0.5 }
+            },
+            text: dataB.map(d => d.text),
+            hoverinfo: 'text'
+        };
+
+        // 帕累托前緣線條
+        const frontierATrace = {
+            x: frontierA.map(p => p.maxDD),
+            y: frontierA.map(p => p.profit),
+            mode: 'lines+markers',
+            type: 'scatter',
+            name: `${modeALabel} 帕累托前緣`,
+            line: {
+                color: '#3b82f6',
+                width: 2,
+                dash: 'dash'
+            },
+            marker: {
+                size: 6,
+                color: '#3b82f6',
+                symbol: 'diamond',
+                line: { color: '#1e40af', width: 1.5 }
+            },
+            hoverinfo: 'x+y',
+            showlegend: true
+        };
+
+        const frontierBTrace = {
+            x: frontierB.map(p => p.maxDD),
+            y: frontierB.map(p => p.profit),
+            mode: 'lines+markers',
+            type: 'scatter',
+            name: `${modeBLabel} 帕累托前緣`,
+            line: {
+                color: '#ef4444',
+                width: 2,
+                dash: 'dash'
+            },
+            marker: {
+                size: 6,
+                color: '#ef4444',
+                symbol: 'diamond',
+                line: { color: '#991b1b', width: 1.5 }
+            },
+            hoverinfo: 'x+y',
+            showlegend: true
+        };
+
+        const layout = {
+            title: {
+                text: `支配關係散點圖 - ${resultsA.length} 個參數組合<br><sub>虛線為帕累托前緣</sub>`,
+                font: { size: 16, color: '#1f2937' }
+            },
+            xaxis: {
+                title: '最大回撤 (%) - 往左越好',
+                zeroline: false,
+                gridcolor: '#e5e7eb',
+                automargin: true
+            },
+            yaxis: {
+                title: '獲利 ($) - 往上越好',
+                zeroline: false,
+                gridcolor: '#e5e7eb',
+                automargin: true
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            hovermode: 'closest',
+            showlegend: true,
+            legend: {
+                x: 0.02,
+                y: 0.98,
+                bgcolor: 'rgba(255,255,255,0.9)',
+                bordercolor: '#d1d5db',
+                borderwidth: 1
+            },
+            margin: { l: 60, r: 10, t: 40, b: 50 },
+            height: 600
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false
+        };
+
+        Plotly.newPlot('dominanceScatterChart', [trace1, trace2, frontierATrace, frontierBTrace], layout, config);
+
+        // 顯示帕累托前緣的參數組合
+        displayParetoFrontierParams(frontierA, frontierB, modeALabel, modeBLabel);
+    }
+
+    // 顯示帕累托前緣上的點的參數組合
+    function displayParetoFrontierParams(frontierA, frontierB, modeALabel, modeBLabel) {
+        let html = '<div style="margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
+        
+        // Mode A 的前緣表格
+        html += `<div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 15px;">
+            <h4 style="margin-top: 0; color: #1e40af;">${modeALabel} 帕累托前緣參數</h4>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background: #3b82f6; color: white;">
+                        <th style="padding: 8px; border: 1px solid #bfdbfe; text-align: left;">短期</th>
+                        <th style="padding: 8px; border: 1px solid #bfdbfe; text-align: left;">長期</th>
+                        <th style="padding: 8px; border: 1px solid #bfdbfe; text-align: right;">回撤(%)</th>
+                        <th style="padding: 8px; border: 1px solid #bfdbfe; text-align: right;">獲利($)</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        
+        frontierA.forEach(point => {
+            html += `<tr style="background: #f0f9ff; border: 1px solid #bfdbfe;">
+                <td style="padding: 8px; border: 1px solid #bfdbfe;">${point.s}</td>
+                <td style="padding: 8px; border: 1px solid #bfdbfe;">${point.l}</td>
+                <td style="padding: 8px; border: 1px solid #bfdbfe; text-align: right;">${point.maxDD.toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #bfdbfe; text-align: right; color: #0891b2; font-weight: bold;">$${point.profit.toFixed(2)}</td>
+            </tr>`;
+        });
+        
+        html += `</tbody></table></div>`;
+        
+        // Mode B 的前緣表格
+        html += `<div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 15px;">
+            <h4 style="margin-top: 0; color: #991b1b;">${modeBLabel} 帕累托前緣參數</h4>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background: #ef4444; color: white;">
+                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: left;">短期</th>
+                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: left;">長期</th>
+                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: right;">回撤(%)</th>
+                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: right;">獲利($)</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        
+        frontierB.forEach(point => {
+            html += `<tr style="background: #fef2f2; border: 1px solid #fca5a5;">
+                <td style="padding: 8px; border: 1px solid #fca5a5;">${point.s}</td>
+                <td style="padding: 8px; border: 1px solid #fca5a5;">${point.l}</td>
+                <td style="padding: 8px; border: 1px solid #fca5a5; text-align: right;">${point.maxDD.toFixed(2)}</td>
+                <td style="padding: 8px; border: 1px solid #fca5a5; text-align: right; color: #dc2626; font-weight: bold;">$${point.profit.toFixed(2)}</td>
+            </tr>`;
+        });
+        
+        html += `</tbody></table></div>`;
+        html += '</div>';
+        
+        // 插入到散點圖下方
+        const chartDiv = document.getElementById('dominanceScatterChart');
+        if (chartDiv) {
+            const container = chartDiv.parentElement;
+            const existingParams = container.querySelector('[data-frontier-params]');
+            if (existingParams) existingParams.remove();
+            
+            const paramsDiv = document.createElement('div');
+            paramsDiv.setAttribute('data-frontier-params', 'true');
+            paramsDiv.innerHTML = html;
+            chartDiv.parentElement.insertBefore(paramsDiv, chartDiv.nextSibling);
+        }
+    }
+
     // 下載對比結果為 CSV
     function downloadDominanceCSV() {
         if (!window.currentDominanceResults) {
@@ -3148,7 +3390,8 @@
 
         const { modeA, modeB, modeALabel, modeBLabel, results, stats } = window.currentDominanceResults;
         
-        let csv = `模式A,模式B,短期,長期,最大回撤(${modeALabel}),獲利(${modeALabel}),最大回撤(${modeBLabel}),獲利(${modeBLabel}),支配關係\n`;
+        let csv = '\uFEFF';  // UTF-8 BOM，確保 Excel 正確識別中文編碼
+        csv += `模式A,模式B,短期,長期,最大回撤(${modeALabel}),獲利(${modeALabel}),最大回撤(${modeBLabel}),獲利(${modeBLabel}),支配關係\n`;
         
         results.forEach(r => {
             const dominanceText = r.dominance === 'A' ? modeALabel : (r.dominance === 'B' ? modeBLabel : '互不支配');
