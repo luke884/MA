@@ -276,6 +276,25 @@ function runComprehensiveBacktest() {
     const closes = backtestDataFull.map(row => parseFloat(row[companyColIdx]) || 0);
     const dates = backtestDataFull.map(row => row[0]);
     
+    // ⭐ 提取成交量數據（用於 VP/VP2 模式）
+    const volumeSelect = document.getElementById('compVolumeSelect');
+    const volumeColumn = volumeSelect ? volumeSelect.value : '';
+    let volumes = null;
+    if (volumeColumn && window.csvHeaders.includes(volumeColumn)) {
+        const volumeColIdx = window.csvHeaders.indexOf(volumeColumn);
+        volumes = backtestDataFull.map(row => parseFloat(row[volumeColIdx]) || 0);
+        console.log(`✓ 已提取成交量數據（欄位: ${volumeColumn}），共 ${volumes.length} 條記錄`);
+    } else if (volumeColumn) {
+        console.log(`⚠️ 未找到成交量欄位 "${volumeColumn}"，VP/VP2 模式將僅使用價格信號`);
+    }
+    
+    // ⭐ 計算成交量 SMA（用於 VP2 模式）
+    let volumeSMA = null;
+    if (volumes) {
+        volumeSMA = calculateMovingAverage(volumes, params.short_ma, 'SMA');
+        console.log(`✓ 已計算成交量 SMA（週期: ${params.short_ma}）`);
+    }
+    
     // ⭐ 計算用戶指定日期在截斷數據中的新索引
     const newStartIdx = startIdxInOriginal - sliceStartIdx;
     
@@ -291,37 +310,43 @@ function runComprehensiveBacktest() {
     
     // 根據選擇的策略執行回測
     if (selectedStrategies.includes('MA')) {
-        // MA 三種變體
-        const maTypes = [];
-        if (params.ma_type === 'SMA' || selectedStrategies.length === 1) maTypes.push('SMA');
-        if (params.ma_type === 'EMA' || selectedStrategies.length === 1) maTypes.push('EMA');
-        if (params.ma_type === 'WMA' || selectedStrategies.length === 1) maTypes.push('WMA');
+        // MA 五種變體：SMA, EMA, WMA, VP, VP2
+        // 根據用戶選擇的 ma_type 執行相應的模式
+        const maType = params.ma_type || 'SMA';
+        const maParams = {...params, ma_type: (maType === 'VP' || maType === 'VP2') ? 'SMA' : maType};
+        // 對於 VP/VP2，使用 SMA 作為基礎 MA，但傳遞成交量信息
+        const mode = (maType === 'VP' || maType === 'VP2') ? maType : 'SMA';
         
-        maTypes.forEach(maType => {
-            const maParams = {...params, ma_type: maType};
-            const signals = generateMASignals(closes, maParams);
-            
-            // ⭐ 計算 MA 用於 validStartIdx 驗證
-            const shortMA = calculateMovingAverage(closes, params.short_ma, maType);
-            const longMA = calculateMovingAverage(closes, params.long_ma, maType);
-            
-            const result = executeRealBacktest(closes, dates, signals, params, newStartIdx, shortMA, longMA);
-            
-            results.push({
-                mode: `MA (${maType})`,
-                tradeCount: result.tradeCount,
-                winRate: result.winRate,
-                avgWin: result.avgWin,
-                avgLoss: result.avgLoss,
-                profitFactor: result.profitFactor,
-                profit: result.totalProfit,
-                finalAsset: result.finalEquity,
-                returnRate: result.returnRate,
-                maxDD: result.maxDD,
-                sharpeRatio: result.sharpeRatio,
-                trades: result.trades,
-                equityHistory: result.equityHistory
-            });
+        if (mode === 'VP' || mode === 'VP2') {
+            if (!volumes) {
+                console.log(`⚠️ 選擇了 ${maType} 模式，但未提取成交量數據，將使用價格信號進行回測`);
+            } else {
+                console.log(`✓ ${maType} 模式：使用成交量驗證信號`);
+            }
+        }
+        
+        const signals = generateMASignals(closes, maParams, volumes, volumeSMA, mode);
+        
+        // ⭐ 計算 MA 用於 validStartIdx 驗證
+        const shortMA = calculateMovingAverage(closes, params.short_ma, maParams.ma_type);
+        const longMA = calculateMovingAverage(closes, params.long_ma, maParams.ma_type);
+        
+        const result = executeRealBacktest(closes, dates, signals, params, newStartIdx, shortMA, longMA);
+        
+        results.push({
+            mode: `MA (${maType})`,
+            tradeCount: result.tradeCount,
+            winRate: result.winRate,
+            avgWin: result.avgWin,
+            avgLoss: result.avgLoss,
+            profitFactor: result.profitFactor,
+            profit: result.totalProfit,
+            finalAsset: result.finalEquity,
+            returnRate: result.returnRate,
+            maxDD: result.maxDD,
+            sharpeRatio: result.sharpeRatio,
+            trades: result.trades,
+            equityHistory: result.equityHistory
         });
     }
     
@@ -1145,10 +1170,20 @@ function generateSignals(closes, dates, strategy, params) {
 }
 
 // MA 策略信號生成
-function generateMASignals(closes, params) {
+function generateMASignals(closes, params, volumes = null, volumeSMA = null, mode = 'SMA') {
     const shortMA = calculateMovingAverage(closes, params.short_ma, params.ma_type);
     const longMA = calculateMovingAverage(closes, params.long_ma, params.ma_type);
     const signals = [{buy: false, sell: false}];  // 第一日沒有信號
+    
+    // ⭐ 定義 epsilon 精度常數（與 C++ 保持一致）
+    const MA_EPSILON = 1e-9;
+    
+    // 計算 MA 關係的輔助函數 (-1: <, 0: =, 1: >) - 使用 epsilon 避免浮點精度誤差
+    const getRel = (short, long) => {
+        const diff = short - long;
+        if (Math.abs(diff) < MA_EPSILON) return 0;  // 相等（容忍精度誤差）
+        return diff < 0 ? -1 : 1;
+    };
     
     let inPosition = false;
     let overlapBuyDay = -1;    // 記錄重疊買入日期
@@ -1161,9 +1196,28 @@ function generateMASignals(closes, params) {
         let buy = false, sell = false;
         
         if (shortMA[i] && longMA[i]) {
-            // 判斷目前漲跌關係
-            const currRel = shortMA[i] > longMA[i] ? 1 : shortMA[i] < longMA[i] ? -1 : 0;
-            const prevRel = shortMA[i-1] > longMA[i-1] ? 1 : shortMA[i-1] < longMA[i-1] ? -1 : 0;
+            // 判斷目前漲跌關係（使用 epsilon-aware 比較）
+            const currRel = getRel(shortMA[i], longMA[i]);
+            const prevRel = getRel(shortMA[i-1], longMA[i-1]);
+            
+            // ⭐ 成交量驗證邏輯（用於 VP/VP2 模式）
+            let volumeValidBuy = true;
+            let volumeValidSell = true;
+            
+            if (volumes && i > 0) {
+                if (mode === 'VP') {
+                    // VP 模式：買入時檢查成交量 > 前一日
+                    volumeValidBuy = volumes[i] > volumes[i-1];
+                    // VP 模式：賣出不檢查成交量
+                    volumeValidSell = true;
+                } else if (mode === 'VP2') {
+                    // VP2 模式：買入和賣出都檢查成交量 > 成交量 SMA
+                    if (volumeSMA && volumeSMA[i] !== null) {
+                        volumeValidBuy = volumes[i] > volumeSMA[i];
+                        volumeValidSell = volumes[i] > volumeSMA[i];
+                    }
+                }
+            }
             
             // ========== 黃金交叉（買入信號） ==========
             if (prevRel === -1 && currRel === 0) {
@@ -1174,13 +1228,13 @@ function generateMASignals(closes, params) {
             } 
             else if (overlapBuyDay > 0 && i === overlapBuyDay + 1 && beforeOverlapRelBuy === -1) {
                 // 情況2：隔一天確認，如果短線 > 長線 -> 買入
-                if (currRel > 0 && !inPosition && i < closes.length - 1) {
+                if (currRel > 0 && !inPosition && i < closes.length - 1 && volumeValidBuy) {
                     buy = true;
                     inPosition = true;
                 }
                 overlapBuyDay = -1;
             } 
-            else if (prevRel === -1 && currRel > 0 && overlapBuyDay === -1 && !inPosition && i < closes.length - 1) {
+            else if (prevRel === -1 && currRel > 0 && overlapBuyDay === -1 && !inPosition && i < closes.length - 1 && volumeValidBuy) {
                 // 情況3：直接交叉（無重疊期），立即買入
                 buy = true;
                 inPosition = true;
@@ -1195,13 +1249,13 @@ function generateMASignals(closes, params) {
             } 
             else if (overlapSellDay > 0 && i === overlapSellDay + 1 && beforeOverlapRelSell === 1) {
                 // 情況2：隔一天確認，如果短線 < 長線 -> 賣出
-                if (currRel < 0 && inPosition) {
+                if (currRel < 0 && inPosition && volumeValidSell) {
                     sell = true;
                     inPosition = false;
                 }
                 overlapSellDay = -1;
             } 
-            else if (prevRel === 1 && currRel < 0 && overlapSellDay === -1 && inPosition) {
+            else if (prevRel === 1 && currRel < 0 && overlapSellDay === -1 && inPosition && volumeValidSell) {
                 // 情況3：直接交叉，立即賣出
                 sell = true;
                 inPosition = false;
