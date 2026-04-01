@@ -1140,7 +1140,7 @@
                 <div class="input-group"><label>結束日期</label><input id="endDate" type="date" value="2020-12-31"></div>
                 <div class="input-group"><label>手續費 (%)</label><input id="commission" type="number" value="0.08" step="0.01"></div>
                 <div class="input-group" style="grid-column: span 2;"><label>上傳檔案 (CSV / Excel)</label><input id="csvFile" type="file" accept=".csv,.xlsx,.xls"></div>
-                <button id="runBtn" onclick="runOptimization()">開始全參數最佳化</button>
+                <button id="runBtn" onclick="runOptimization().catch(err => console.error('優化錯誤:', err))">開始全參數最佳化</button>
             </div>
 
             <div id="querySection" class="hidden">
@@ -1981,33 +1981,33 @@
         return ema;
     }
 
-    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP', volumePeriod = 20) {
+    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP', volumePeriod = 20, precomputedVolumeMA = null) {
         const COMMISSION = commission / 100;
         let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
         let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
         
-        // 提取成交量数据 - 高效的日期映射（避免嵌套循环和索引错乱）
-        const volumeData = volumeHeaderIndex >= 0 ? 
-            (() => {
-                const dateMap = new Map();
-                for (let i = 0; i < window.csvRaw.length; i++) {
-                    const dateStr = window.csvRaw[i][0];
-                    if (dateStr && !dateMap.has(dateStr)) {
-                        dateMap.set(dateStr, i);
-                    }
-                }
-                return data.map(d => {
-                    const csvRawIdx = dateMap.get(d.date);
-                    if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
-                        const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
-                        return isNaN(vol) ? 0 : vol;
-                    }
-                    return 0;
-                });
-            })() : null;
+        // ⭐ 優化：使用預先計算的 volumeMA，避免每次都重新計算
+        let volumeMA = precomputedVolumeMA;
         
-        // ⭐ 成交量 MA：VP 模式用 volumePeriod，VP2 模式用 sPeriod
-        const volumeMA = volumeData ? SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1)) : null;
+        if (!volumeMA && volumeHeaderIndex >= 0) {
+            // 只有在沒有提供預先計算 volumeMA 時才計算（向後相容）
+            const dateMap = new Map();
+            for (let i = 0; i < window.csvRaw.length; i++) {
+                const dateStr = window.csvRaw[i][0];
+                if (dateStr && !dateMap.has(dateStr)) {
+                    dateMap.set(dateStr, i);
+                }
+            }
+            const volumeData = data.map(d => {
+                const csvRawIdx = dateMap.get(d.date);
+                if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
+                    const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
+                    return isNaN(vol) ? 0 : vol;
+                }
+                return 0;
+            });
+            volumeMA = SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1));
+        }
         
         // 找到第一个有效数据的索引
         let validStartIdx = startIdx;
@@ -2371,6 +2371,35 @@
             const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
                 window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
             
+            // ⭐ 關鍵優化：提前計算所有成交量 MA（避免在 16.7M 次迴圈中重複計算）
+            let g_allVolumeMA = {}; // 緩存: g_allVolumeMA[1], g_allVolumeMA[2], ..., g_allVolumeMA[256]
+            
+            if (volumeHeaderIndex >= 0) {
+                // 一次性提取成交量數據
+                const dateMap = new Map();
+                for (let i = 0; i < window.csvRaw.length; i++) {
+                    const dateStr = window.csvRaw[i][0];
+                    if (dateStr && !dateMap.has(dateStr)) {
+                        dateMap.set(dateStr, i);
+                    }
+                }
+                const volumeData = g_backtestData.map(d => {
+                    const csvRawIdx = dateMap.get(d.date);
+                    if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
+                        const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
+                        return isNaN(vol) ? 0 : vol;
+                    }
+                    return 0;
+                });
+                
+                // 預計算所有 1-256 週期的成交量 MA（一次性完成）
+                console.log('[優化] 預計算 256 個成交量 MA...');
+                for (let period = 1; period <= MAX_PERIOD; period++) {
+                    g_allVolumeMA[period] = SMA(volumeData, period);
+                }
+                console.log('[優化] 完成所有成交量 MA 計算');
+            }
+            
             // ⭐ VP 模式：窮舉短MA × 長MA × 成交量MA (256³ = 16,777,216 組合)
             // VP2 模式：窮舉短MA × 長MA (256² = 65,536 組合，不窮舉成交量MA)
             const maxVolumePeriod = g_currentMode === 'VP' ? MAX_PERIOD : 1;  // VP 窮舉成交量MA，VP2 不窮舉
@@ -2382,7 +2411,8 @@
                 }
                 for (let l = 1; l <= MAX_PERIOD; l++) {
                     for (let v = 1; v <= maxVolumePeriod; v++) {  // ⭐ VP 模式窮舉成交量MA週期
-                        let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode, v);  // 傳遞 v 為成交量MA週期
+                        // 傳遞預先計算好的 volumeMA，而非讓 backtest_VP 重新計算
+                        let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode, v, g_allVolumeMA[v]);  // ⭐ 傳遞 g_allVolumeMA[v]
                         let profit = res.finalAsset - g_initialCash;
                         results.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, ...res, profit });  // VP 模式記錄 v 參數
                         g_allResults.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, finalAsset: res.finalAsset, profit });
