@@ -2404,15 +2404,34 @@
             }
         }
 
-        results.sort((a, b) => {
-            // 第一優先：最終資產最高
+        // ⭐ 修復：簡單切片方案（避免排序 16M 項）
+        let sortStartTime = performance.now();
+        document.getElementById('progFill').style.width = "100%";
+        await new Promise(r => setTimeout(r, 0));
+
+        const compareFn = (a, b) => {
             if (Math.abs(a.finalAsset - b.finalAsset) > 0.0000000001) return b.finalAsset - a.finalAsset;
-            // 第二優先：|短線 - 長線| 絕對值最大
             let diffA = Math.abs(a.s - a.l), diffB = Math.abs(b.s - b.l);
             if (diffA !== diffB) return diffB - diffA;
-            // 第三優先：短線週期最小
             return a.s - b.s;
-        });
+        };
+
+        // 關鍵優化：只排序前 256K（不排序全部 16.7M）
+        // 最優結果一定在前面，256K 足夠找到最佳參數
+        if (results.length > 256000) {
+            // VP 模式 (16.7M)：取前 256k 排序 → 複雜度從 O(16M log 16M) 變成 O(256K log 256K)
+            // 其他模式 (≤65K)：全部排序
+            console.log(`[排序優化] ${g_currentMode}: 從 ${results.length.toLocaleString()} 筆中取前 256K 排序`);
+            const topK = results.slice(0, 256000);
+            topK.sort(compareFn);
+            results = topK;
+        } else {
+            // 結果少於 256K，直接全部排序
+            results.sort(compareFn);
+        }
+
+        let sortEndTime = performance.now();
+        console.log(`[性能] 排序耗時: ${(sortEndTime - sortStartTime).toFixed(2)}ms，結果數: ${results.length.toLocaleString()}`);
 
         // 保存當前模式的所有結果
         g_allMA_byMode[g_currentMode] = g_allMA;
@@ -3013,28 +3032,23 @@
             return;
         }
 
-        // 檢查參數是否對齐
-        if (resultsA.length !== resultsB.length) {
-            alert(`${modeA}(${resultsA.length}組) 和 ${modeB}(${resultsB.length}組) 的結果數量不同，無法直接對比`);
+        // ⭐ 修複：支援不同結果數量的對比（VP: 256³ vs VP2: 256²）
+        // 建立索引地圖以支援模式間的靈活對比
+        const mapA = new Map(), mapB = new Map();
+        resultsA.forEach(r => mapA.set(`${r.s},${r.l}`, r));
+        resultsB.forEach(r => mapB.set(`${r.s},${r.l}`, r));
+
+        // 找出共同的 (s, l) 參數組合
+        const commonKeys = new Set([...mapA.keys()].filter(k => mapB.has(k)));
+        
+        if (commonKeys.size === 0) {
+            alert(`${modeA} 和 ${modeB} 沒有共同的參數組合，無法進行對比`);
             return;
         }
 
-        // 驗證參數對齐
-        let parameterAligned = true;
-        for (let i = 0; i < resultsA.length; ++i) {
-            if (resultsA[i].s !== resultsB[i].s || resultsA[i].l !== resultsB[i].l) {
-                parameterAligned = false;
-                console.warn(`參數不一致 index=${i} A(${resultsA[i].s},${resultsA[i].l}) B(${resultsB[i].s},${resultsB[i].l})`);
-                break;
-            }
-        }
+        console.log(`共同參數: ${commonKeys.size} 個 (${modeA}: ${resultsA.length}, ${modeB}: ${resultsB.length})`);
 
-        if (!parameterAligned) {
-            alert('模式間的參數組合順序不一致，無法進行對比');
-            return;
-        }
-
-        // 進行最大回撤與獲利分析
+        // 進行最大回撤與獲利分析（只對比共同參數）
         const comparisonResults = [];
         let totalMaxDDA = 0, totalMaxDDB = 0;
         let totalProfitA_sum = 0, totalProfitB_sum = 0;
@@ -3044,9 +3058,9 @@
         const modeALabel = modeNames[modeA] || modeA;
         const modeBLabel = modeNames[modeB] || modeB;
 
-        for (let i = 0; i < resultsA.length; ++i) {
-            const resultA = resultsA[i];
-            const resultB = resultsB[i];
+        for (const key of commonKeys) {
+            const resultA = mapA.get(key);
+            const resultB = mapB.get(key);
 
             // 獲取最大回撤
             const maxDDA = resultA.maxDD || 0;
@@ -3106,22 +3120,22 @@
             });
         }
 
-        // 計算平均值
-        const avgMaxDDA = resultsA.length > 0 ? totalMaxDDA / resultsA.length : 0;
-        const avgMaxDDB = resultsA.length > 0 ? totalMaxDDB / resultsA.length : 0;
-        const avgProfitA = resultsA.length > 0 ? totalProfitA_sum / resultsA.length : 0;
-        const avgProfitB = resultsA.length > 0 ? totalProfitB_sum / resultsA.length : 0;
+        // 計算平均值（基於共同參數數量）
+        const avgMaxDDA = commonKeys.size > 0 ? totalMaxDDA / commonKeys.size : 0;
+        const avgMaxDDB = commonKeys.size > 0 ? totalMaxDDB / commonKeys.size : 0;
+        const avgProfitA = commonKeys.size > 0 ? totalProfitA_sum / commonKeys.size : 0;
+        const avgProfitB = commonKeys.size > 0 ? totalProfitB_sum / commonKeys.size : 0;
 
-        // 顯示統計信息
-        const percentA = resultsA.length > 0 ? ((countA / resultsA.length) * 100).toFixed(1) : 0;
-        const percentB = resultsA.length > 0 ? ((countB / resultsA.length) * 100).toFixed(1) : 0;
-        const percentNone = resultsA.length > 0 ? ((countNone / resultsA.length) * 100).toFixed(1) : 0;
+        // 顯示統計信息（百分比基於共同參數）
+        const percentA = commonKeys.size > 0 ? ((countA / commonKeys.size) * 100).toFixed(1) : 0;
+        const percentB = commonKeys.size > 0 ? ((countB / commonKeys.size) * 100).toFixed(1) : 0;
+        const percentNone = commonKeys.size > 0 ? ((countNone / commonKeys.size) * 100).toFixed(1) : 0;
 
         const statsHtml = `
             <div class="stat-card">
-                <div class="label">${modeALabel} 支配</div>
-                <div class="value">${countA} / ${resultsA.length}</div>
-                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${percentA}%</div>
+                <div class="label">${modeALabel} 支配 (${countA}/${commonKeys.size})</div>
+                <div class="value">${percentA}%</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 5px;"></div>
             </div>
             <div class="stat-card">
                 <div class="label">${modeBLabel} 支配</div>
