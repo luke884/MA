@@ -1206,10 +1206,12 @@ function generateMASignals(closes, params, volumes = null, volumeSMA = null, mod
             
             if (volumes && i > 0) {
                 if (mode === 'VP') {
-                    // VP 模式：買入時檢查成交量 > 前一日
-                    volumeValidBuy = volumes[i] > volumes[i-1];
-                    // VP 模式：賣出不檢查成交量
-                    volumeValidSell = true;
+                    // VP 模式 (新規則)：買入和賣出都檢查 成交量 > 成交量MA
+                    // 即：長短線MA有黃金/死亡交叉 AND 成交量 > 成交量MA 才能交易
+                    if (volumeSMA && volumeSMA[i] !== null) {
+                        volumeValidBuy = volumes[i] > volumeSMA[i];
+                        volumeValidSell = volumes[i] > volumeSMA[i];
+                    }
                 } else if (mode === 'VP2') {
                     // VP2 模式：買入和賣出都檢查成交量 > 成交量 SMA
                     if (volumeSMA && volumeSMA[i] !== null) {

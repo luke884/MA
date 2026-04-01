@@ -1777,7 +1777,12 @@
             // 有數據：顯示排名表和最優參數
             document.getElementById('bestResult').innerHTML = '尚未執行';
             updateRankTable(g_rankedResults.slice(0, 65536));
-            showSpecificResult(g_rankedResults[0].s, g_rankedResults[0].l, 1, null, g_commission);
+            // VP 模式傳遞 v 參數
+            if (g_currentMode === 'VP' && g_rankedResults[0].v) {
+                showSpecificResult(g_rankedResults[0].s, g_rankedResults[0].l, g_rankedResults[0].v, 1, null, g_commission);
+            } else {
+                showSpecificResult(g_rankedResults[0].s, g_rankedResults[0].l, 1, null, g_commission);
+            }
         } else {
             // 無數據：清空所有顯示
             document.getElementById('bestResult').innerHTML = '尚未執行';
@@ -1976,7 +1981,7 @@
         return ema;
     }
 
-    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP') {
+    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP', volumePeriod = 20) {
         const COMMISSION = commission / 100;
         let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
         let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
@@ -2001,7 +2006,8 @@
                 });
             })() : null;
         
-        const volumeMA = volumeData ? SMA(volumeData, Math.max(sPeriod, 1)) : null; // 成交量的移動平均，用於 VP2 模式
+        // ⭐ 成交量 MA：VP 模式用 volumePeriod，VP2 模式用 sPeriod
+        const volumeMA = volumeData ? SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1)) : null;
         
         // 找到第一个有效数据的索引
         let validStartIdx = startIdx;
@@ -2071,9 +2077,9 @@
                 const prevRel = getRel(maS[i-1], maL[i-1]);
                 const currRel = getRel(maS[i], maL[i]);
                 
-                const volumeValid = strategyMode === 'VP2'
-                    ? (volumeData && volumeMA && volumeMA[i] !== null ? volumeData[i] > volumeMA[i] : true)
-                    : (volumeData ? volumeData[i] > volumeData[i-1] : true);
+                // ⭐ VP 模式（新規則）：同時檢查 MA 交叉和成交量 > 成交量MA
+                // VP2 模式：同樣檢查 MA 交叉和成交量 > 成交量MA
+                const volumeValid = (volumeData && volumeMA && volumeMA[i] !== null) ? (volumeData[i] > volumeMA[i]) : true;
                 
                 // 黃金交叉 + 成交量條件
                 if (prevRel === -1 && currRel === 0) {
@@ -2093,20 +2099,20 @@
                     processBuy(price, data[i].date, isLastDay, i);
                 }
                 
-                // 死亡交叉（VP2 模式需要成交量條件）
+                // 死亡交叉 + 成交量條件（VP 和 VP2 都檢查）
                 if (prevRel === 1 && currRel === 0) {
                     overlapDay = i;
                     beforeOverlapRel = 1;
                     overlapVal = +maS[i].toFixed(9);
                 } 
                 else if (overlapDay > 0 && i === overlapDay + 1 && beforeOverlapRel === 1) {
-                    if (currRel < 0 && (strategyMode !== 'VP2' || volumeValid)) {                   //賣出不加成交量：if (currRel < 0) ||||| 賣出加成交量：if (currRel < 0 && (strategyMode !== 'VP2' || volumeValid))
+                    if (currRel < 0 && volumeValid) {
                         allCrosses.push({ date: data[i].date, type: 'death', val: overlapVal });
                         processSell(price, data[i].date);
                     }
                     overlapDay = -1;
                 } 
-                else if (prevRel === 1 && currRel < 0 && overlapDay === -1 && (strategyMode !== 'VP2' || volumeValid)) {  //賣出不加成交量：else if (prevRel === 1 && currRel < 0 && overlapDay === -1) ||||| 賣出加成交量：else if (prevRel === 1 && currRel < 0 && overlapDay === -1 && (strategyMode !== 'VP2' || volumeValid)) 
+                else if (prevRel === 1 && currRel < 0 && overlapDay === -1 && volumeValid) { 
                     processSell(price, data[i].date);
                 }
             }
@@ -2365,16 +2371,22 @@
             const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
                 window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
             
+            // ⭐ VP 模式：窮舉短MA × 長MA × 成交量MA (256³ = 16,777,216 組合)
+            // VP2 模式：窮舉短MA × 長MA (256² = 65,536 組合，不窮舉成交量MA)
+            const maxVolumePeriod = g_currentMode === 'VP' ? MAX_PERIOD : 1;  // VP 窮舉成交量MA，VP2 不窮舉
+            
             for (let s = 1; s <= MAX_PERIOD; s++) {
                 if (s % 16 === 0) {
                     document.getElementById('progFill').style.width = (s/MAX_PERIOD*100) + "%";
                     await new Promise(r => setTimeout(r, 0));
                 }
                 for (let l = 1; l <= MAX_PERIOD; l++) {
-                    let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode);
-                    let profit = res.finalAsset - g_initialCash;
-                    results.push({ s, l, ...res, profit });
-                    g_allResults.push({ s, l, finalAsset: res.finalAsset, profit });
+                    for (let v = 1; v <= maxVolumePeriod; v++) {  // ⭐ VP 模式窮舉成交量MA週期
+                        let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode, v);  // 傳遞 v 為成交量MA週期
+                        let profit = res.finalAsset - g_initialCash;
+                        results.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, ...res, profit });  // VP 模式記錄 v 參數
+                        g_allResults.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, finalAsset: res.finalAsset, profit });
+                    }
                 }
             }
         } else {
@@ -2408,12 +2420,22 @@
         g_rankedResults_byMode[g_currentMode] = results;  // 新增：保存排序後的結果（修復模式切換清空數據的問題）
         g_unrankedResults_byMode[g_currentMode] = results.slice().sort((a, b) => {  // 新增：保存按參數順序的結果（用於支配關係對比）
             if (a.s !== b.s) return a.s - b.s;
-            return a.l - b.l;
+            if (a.l !== b.l) return a.l - b.l;
+            // ⭐ VP 模式也按 v 排序
+            if (g_currentMode === 'VP' && (a.v !== undefined || b.v !== undefined)) {
+                return (a.v || 0) - (b.v || 0);
+            }
+            return 0;
         });
         g_rankedResults = g_rankedResults_byMode[g_currentMode];  // 更新全局引用
         
         updateRankTable(results.slice(0, 65536)); 
-        showSpecificResult(results[0].s, results[0].l, 1, null, g_commission);
+        // VP 模式傳遞 v 參數
+        if (g_currentMode === 'VP' && results[0].v) {
+            showSpecificResult(results[0].s, results[0].l, results[0].v, 1, null, g_commission);
+        } else {
+            showSpecificResult(results[0].s, results[0].l, 1, null, g_commission);
+        }
         render2DChart();
         render3DChart();
         document.getElementById('chartGrid').style.display = 'grid';
@@ -2424,13 +2446,35 @@
 
     function updateRankTable(top) {
         document.querySelector("#topTable tbody").innerHTML = top.map((r, i) => 
-            `<tr onclick="showSpecificResult(${r.s}, ${r.l}, ${i+1}, this)">
-                <td>${i+1}</td><td>${r.s}/${r.l}</td><td>${r.tradeCount}</td><td>$${formatCurrency(r.finalAsset)}</td>
+            `<tr onclick="showSpecificResult(${r.s}, ${r.l}, ${r.v !== undefined ? r.v : 'undefined'}, ${i+1}, this)" data-v="${r.v !== undefined ? r.v : ''}">
+                <td>${i+1}</td><td>${r.s}/${r.l}${r.v !== undefined ? `/${r.v}` : ''}</td><td>${r.tradeCount}</td><td>$${formatCurrency(r.finalAsset)}</td>
             </tr>`).join('');
     }
 
-    function showSpecificResult(s, l, rank, element = null, commission = g_commission) {
-        if (element) {
+    function showSpecificResult(s, l, v_or_rank, rank_or_element = null, element_or_commission = null, commission = g_commission) {
+        // ⭐ 相容新舊簽名
+        // 新簽名 (VP模式)：showSpecificResult(s, l, v, rank, element, commission)  - updateRankTable 內呼叫
+        // 舊簽名 (其他模式)：showSpecificResult(s, l, rank, element, commission)     - 初始化或其他地方呼叫
+        
+        let v, rank, element;
+        
+        // 判斷是新簽名還是舊簽名：
+        // 新簽名：v_or_rank >= 1 (v值), rank_or_element >= 1 (rank值，排名)
+        // 舊簽名：v_or_rank >= 1 (rank值)、rank_or_element 是 element 或 null
+        if (g_currentMode === 'VP' && rank_or_element !== null && typeof rank_or_element === 'number' && rank_or_element >= 1 && element_or_commission !== null) {
+            // 新簽名：(s, l, v, rank, element, commission)
+            v = v_or_rank;
+            rank = rank_or_element;
+            element = element_or_commission;
+            // commission 已是參數
+        } else {
+            // 舊簽名：(s, l, rank, element, commission)
+            rank = v_or_rank;
+            element = rank_or_element;
+            commission = element_or_commission || g_commission;
+        }
+        
+        if (element && typeof element.classList !== 'undefined') {
             document.querySelectorAll('#topTable tbody tr').forEach(tr => tr.classList.remove('selected'));
             element.classList.add('selected');
         }
@@ -2443,7 +2487,9 @@
         if (g_currentMode === 'VP' || g_currentMode === 'VP2') {
             const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
                 window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
-            result = backtest_VP(data, mS, mL, g_initialCash, g_startIdx, commission, true, sVal, lVal, volumeHeaderIndex, g_currentMode);
+            // ⭐ VP 模式使用 v 參數（從窮舉結果中取得），VP2 模式使用預設
+            const volumePeriod = v || (g_currentMode === 'VP' ? Math.max(sVal, 1) : Math.max(sVal, 1));
+            result = backtest_VP(data, mS, mL, g_initialCash, g_startIdx, commission, true, sVal, lVal, volumeHeaderIndex, g_currentMode, volumePeriod);
             
             // VP2 模式：同時運行純價格 MA 的 backtest，用於圖表顯示
             if (g_currentMode === 'VP2') {
