@@ -1986,11 +1986,9 @@
         let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
         let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
         
-        // ⭐ 優化：使用預先計算的 volumeMA，避免每次都重新計算
-        let volumeMA = precomputedVolumeMA;
-        
-        if (!volumeMA && volumeHeaderIndex >= 0) {
-            // 只有在沒有提供預先計算 volumeMA 時才計算（向後相容）
+        // ⭐ 提取成交量數據（總是提取，因為後面會用到）
+        let volumeData = null;
+        if (volumeHeaderIndex >= 0) {
             const dateMap = new Map();
             for (let i = 0; i < window.csvRaw.length; i++) {
                 const dateStr = window.csvRaw[i][0];
@@ -1998,7 +1996,7 @@
                     dateMap.set(dateStr, i);
                 }
             }
-            const volumeData = data.map(d => {
+            volumeData = data.map(d => {
                 const csvRawIdx = dateMap.get(d.date);
                 if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
                     const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
@@ -2006,6 +2004,11 @@
                 }
                 return 0;
             });
+        }
+        
+        // ⭐ 優化：優先使用預先計算的 volumeMA，次選即時計算
+        let volumeMA = precomputedVolumeMA;
+        if (!volumeMA && volumeData) {
             volumeMA = SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1));
         }
         
