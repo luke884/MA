@@ -1140,7 +1140,7 @@
                 <div class="input-group"><label>結束日期</label><input id="endDate" type="date" value="2020-12-31"></div>
                 <div class="input-group"><label>手續費 (%)</label><input id="commission" type="number" value="0.08" step="0.01"></div>
                 <div class="input-group" style="grid-column: span 2;"><label>上傳檔案 (CSV / Excel)</label><input id="csvFile" type="file" accept=".csv,.xlsx,.xls"></div>
-                <button id="runBtn" onclick="runOptimization().catch(err => console.error('優化錯誤:', err))">開始全參數最佳化</button>
+                <button id="runBtn" onclick="runOptimization()">開始全參數最佳化</button>
             </div>
 
             <div id="querySection" class="hidden">
@@ -1981,36 +1981,33 @@
         return ema;
     }
 
-    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP', volumePeriod = 20, precomputedVolumeMA = null) {
+    function backtest_VP(data, maS, maL, initialCash, startIdx, commission, recordTrades = false, sPeriod = 5, lPeriod = 20, volumeHeaderIndex = -1, strategyMode = 'VP', volumePeriod = 20) {
         const COMMISSION = commission / 100;
         let cash = initialCash, shares = 0, distCap = 0, hasPos = false;
         let maxValue = initialCash, maxDD = 0, trades = [], allCrosses = [], tradeCount = 0;
         
-        // ⭐ 提取成交量數據（總是提取，因為後面會用到）
-        let volumeData = null;
-        if (volumeHeaderIndex >= 0) {
-            const dateMap = new Map();
-            for (let i = 0; i < window.csvRaw.length; i++) {
-                const dateStr = window.csvRaw[i][0];
-                if (dateStr && !dateMap.has(dateStr)) {
-                    dateMap.set(dateStr, i);
+        // 提取成交量数据 - 高效的日期映射（避免嵌套循环和索引错乱）
+        const volumeData = volumeHeaderIndex >= 0 ? 
+            (() => {
+                const dateMap = new Map();
+                for (let i = 0; i < window.csvRaw.length; i++) {
+                    const dateStr = window.csvRaw[i][0];
+                    if (dateStr && !dateMap.has(dateStr)) {
+                        dateMap.set(dateStr, i);
+                    }
                 }
-            }
-            volumeData = data.map(d => {
-                const csvRawIdx = dateMap.get(d.date);
-                if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
-                    const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
-                    return isNaN(vol) ? 0 : vol;
-                }
-                return 0;
-            });
-        }
+                return data.map(d => {
+                    const csvRawIdx = dateMap.get(d.date);
+                    if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
+                        const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
+                        return isNaN(vol) ? 0 : vol;
+                    }
+                    return 0;
+                });
+            })() : null;
         
-        // ⭐ 優化：優先使用預先計算的 volumeMA，次選即時計算
-        let volumeMA = precomputedVolumeMA;
-        if (!volumeMA && volumeData) {
-            volumeMA = SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1));
-        }
+        // ⭐ 成交量 MA：VP 模式用 volumePeriod，VP2 模式用 sPeriod
+        const volumeMA = volumeData ? SMA(volumeData, strategyMode === 'VP' ? Math.max(volumePeriod, 1) : Math.max(sPeriod, 1)) : null;
         
         // 找到第一个有效数据的索引
         let validStartIdx = startIdx;
@@ -2374,35 +2371,6 @@
             const volumeHeaderIndex = document.getElementById('volumeSelect').value ? 
                 window.csvHeaders.indexOf(document.getElementById('volumeSelect').value) : -1;
             
-            // ⭐ 關鍵優化：提前計算所有成交量 MA（避免在 16.7M 次迴圈中重複計算）
-            let g_allVolumeMA = {}; // 緩存: g_allVolumeMA[1], g_allVolumeMA[2], ..., g_allVolumeMA[256]
-            
-            if (volumeHeaderIndex >= 0) {
-                // 一次性提取成交量數據
-                const dateMap = new Map();
-                for (let i = 0; i < window.csvRaw.length; i++) {
-                    const dateStr = window.csvRaw[i][0];
-                    if (dateStr && !dateMap.has(dateStr)) {
-                        dateMap.set(dateStr, i);
-                    }
-                }
-                const volumeData = g_backtestData.map(d => {
-                    const csvRawIdx = dateMap.get(d.date);
-                    if (csvRawIdx !== undefined && csvRawIdx >= 0 && csvRawIdx < window.csvRaw.length) {
-                        const vol = parseFloat(window.csvRaw[csvRawIdx][volumeHeaderIndex]);
-                        return isNaN(vol) ? 0 : vol;
-                    }
-                    return 0;
-                });
-                
-                // 預計算所有 1-256 週期的成交量 MA（一次性完成）
-                console.log('[優化] 預計算 256 個成交量 MA...');
-                for (let period = 1; period <= MAX_PERIOD; period++) {
-                    g_allVolumeMA[period] = SMA(volumeData, period);
-                }
-                console.log('[優化] 完成所有成交量 MA 計算');
-            }
-            
             // ⭐ VP 模式：窮舉短MA × 長MA × 成交量MA (256³ = 16,777,216 組合)
             // VP2 模式：窮舉短MA × 長MA (256² = 65,536 組合，不窮舉成交量MA)
             const maxVolumePeriod = g_currentMode === 'VP' ? MAX_PERIOD : 1;  // VP 窮舉成交量MA，VP2 不窮舉
@@ -2414,8 +2382,7 @@
                 }
                 for (let l = 1; l <= MAX_PERIOD; l++) {
                     for (let v = 1; v <= maxVolumePeriod; v++) {  // ⭐ VP 模式窮舉成交量MA週期
-                        // 傳遞預先計算好的 volumeMA，而非讓 backtest_VP 重新計算
-                        let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode, v, g_allVolumeMA[v]);  // ⭐ 傳遞 g_allVolumeMA[v]
+                        let res = backtest_VP(g_backtestData, g_allMA[s], g_allMA[l], g_initialCash, g_startIdx, g_commission, false, s, l, volumeHeaderIndex, g_currentMode, v);  // 傳遞 v 為成交量MA週期
                         let profit = res.finalAsset - g_initialCash;
                         results.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, ...res, profit });  // VP 模式記錄 v 參數
                         g_allResults.push({ s, l, v: g_currentMode === 'VP' ? v : undefined, finalAsset: res.finalAsset, profit });
@@ -2437,34 +2404,15 @@
             }
         }
 
-        // ⭐ 修復：簡單切片方案（避免排序 16M 項）
-        let sortStartTime = performance.now();
-        document.getElementById('progFill').style.width = "100%";
-        await new Promise(r => setTimeout(r, 0));
-
-        const compareFn = (a, b) => {
+        results.sort((a, b) => {
+            // 第一優先：最終資產最高
             if (Math.abs(a.finalAsset - b.finalAsset) > 0.0000000001) return b.finalAsset - a.finalAsset;
+            // 第二優先：|短線 - 長線| 絕對值最大
             let diffA = Math.abs(a.s - a.l), diffB = Math.abs(b.s - b.l);
             if (diffA !== diffB) return diffB - diffA;
+            // 第三優先：短線週期最小
             return a.s - b.s;
-        };
-
-        // 關鍵優化：只排序前 256K（不排序全部 16.7M）
-        // 最優結果一定在前面，256K 足夠找到最佳參數
-        if (results.length > 256000) {
-            // VP 模式 (16.7M)：取前 256k 排序 → 複雜度從 O(16M log 16M) 變成 O(256K log 256K)
-            // 其他模式 (≤65K)：全部排序
-            console.log(`[排序優化] ${g_currentMode}: 從 ${results.length.toLocaleString()} 筆中取前 256K 排序`);
-            const topK = results.slice(0, 256000);
-            topK.sort(compareFn);
-            results = topK;
-        } else {
-            // 結果少於 256K，直接全部排序
-            results.sort(compareFn);
-        }
-
-        let sortEndTime = performance.now();
-        console.log(`[性能] 排序耗時: ${(sortEndTime - sortStartTime).toFixed(2)}ms，結果數: ${results.length.toLocaleString()}`);
+        });
 
         // 保存當前模式的所有結果
         g_allMA_byMode[g_currentMode] = g_allMA;
@@ -3065,23 +3013,28 @@
             return;
         }
 
-        // ⭐ 修複：支援不同結果數量的對比（VP: 256³ vs VP2: 256²）
-        // 建立索引地圖以支援模式間的靈活對比
-        const mapA = new Map(), mapB = new Map();
-        resultsA.forEach(r => mapA.set(`${r.s},${r.l}`, r));
-        resultsB.forEach(r => mapB.set(`${r.s},${r.l}`, r));
-
-        // 找出共同的 (s, l) 參數組合
-        const commonKeys = new Set([...mapA.keys()].filter(k => mapB.has(k)));
-        
-        if (commonKeys.size === 0) {
-            alert(`${modeA} 和 ${modeB} 沒有共同的參數組合，無法進行對比`);
+        // 檢查參數是否對齐
+        if (resultsA.length !== resultsB.length) {
+            alert(`${modeA}(${resultsA.length}組) 和 ${modeB}(${resultsB.length}組) 的結果數量不同，無法直接對比`);
             return;
         }
 
-        console.log(`共同參數: ${commonKeys.size} 個 (${modeA}: ${resultsA.length}, ${modeB}: ${resultsB.length})`);
+        // 驗證參數對齐
+        let parameterAligned = true;
+        for (let i = 0; i < resultsA.length; ++i) {
+            if (resultsA[i].s !== resultsB[i].s || resultsA[i].l !== resultsB[i].l) {
+                parameterAligned = false;
+                console.warn(`參數不一致 index=${i} A(${resultsA[i].s},${resultsA[i].l}) B(${resultsB[i].s},${resultsB[i].l})`);
+                break;
+            }
+        }
 
-        // 進行最大回撤與獲利分析（只對比共同參數）
+        if (!parameterAligned) {
+            alert('模式間的參數組合順序不一致，無法進行對比');
+            return;
+        }
+
+        // 進行最大回撤與獲利分析
         const comparisonResults = [];
         let totalMaxDDA = 0, totalMaxDDB = 0;
         let totalProfitA_sum = 0, totalProfitB_sum = 0;
@@ -3091,9 +3044,9 @@
         const modeALabel = modeNames[modeA] || modeA;
         const modeBLabel = modeNames[modeB] || modeB;
 
-        for (const key of commonKeys) {
-            const resultA = mapA.get(key);
-            const resultB = mapB.get(key);
+        for (let i = 0; i < resultsA.length; ++i) {
+            const resultA = resultsA[i];
+            const resultB = resultsB[i];
 
             // 獲取最大回撤
             const maxDDA = resultA.maxDD || 0;
@@ -3153,22 +3106,22 @@
             });
         }
 
-        // 計算平均值（基於共同參數數量）
-        const avgMaxDDA = commonKeys.size > 0 ? totalMaxDDA / commonKeys.size : 0;
-        const avgMaxDDB = commonKeys.size > 0 ? totalMaxDDB / commonKeys.size : 0;
-        const avgProfitA = commonKeys.size > 0 ? totalProfitA_sum / commonKeys.size : 0;
-        const avgProfitB = commonKeys.size > 0 ? totalProfitB_sum / commonKeys.size : 0;
+        // 計算平均值
+        const avgMaxDDA = resultsA.length > 0 ? totalMaxDDA / resultsA.length : 0;
+        const avgMaxDDB = resultsA.length > 0 ? totalMaxDDB / resultsA.length : 0;
+        const avgProfitA = resultsA.length > 0 ? totalProfitA_sum / resultsA.length : 0;
+        const avgProfitB = resultsA.length > 0 ? totalProfitB_sum / resultsA.length : 0;
 
-        // 顯示統計信息（百分比基於共同參數）
-        const percentA = commonKeys.size > 0 ? ((countA / commonKeys.size) * 100).toFixed(1) : 0;
-        const percentB = commonKeys.size > 0 ? ((countB / commonKeys.size) * 100).toFixed(1) : 0;
-        const percentNone = commonKeys.size > 0 ? ((countNone / commonKeys.size) * 100).toFixed(1) : 0;
+        // 顯示統計信息
+        const percentA = resultsA.length > 0 ? ((countA / resultsA.length) * 100).toFixed(1) : 0;
+        const percentB = resultsA.length > 0 ? ((countB / resultsA.length) * 100).toFixed(1) : 0;
+        const percentNone = resultsA.length > 0 ? ((countNone / resultsA.length) * 100).toFixed(1) : 0;
 
         const statsHtml = `
             <div class="stat-card">
-                <div class="label">${modeALabel} 支配 (${countA}/${commonKeys.size})</div>
-                <div class="value">${percentA}%</div>
-                <div style="font-size: 0.9em; color: #666; margin-top: 5px;"></div>
+                <div class="label">${modeALabel} 支配</div>
+                <div class="value">${countA} / ${resultsA.length}</div>
+                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${percentA}%</div>
             </div>
             <div class="stat-card">
                 <div class="label">${modeBLabel} 支配</div>
